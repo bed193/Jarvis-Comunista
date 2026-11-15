@@ -50,6 +50,8 @@
 <script>
 /* Modo fixo atual: null = normal | 'gamer' | 'focus' | 'dance'. Só volta ao normal com [normal] ou pedido do usuário. */
 let lockedMode = null;
+/* Camada temática liga/desliga: começa sempre desativada; não trava as expressões. */
+let isCommunist = false;
 
 (() => {
   'use strict';
@@ -198,10 +200,11 @@ let lockedMode = null;
     sleep:     { slp: 1, c: '#4C1D95' },
     wake:      { sx: 1.08, sy: 1.38, spark: 1, glow: 1, c: '#F5E9FF' },
     scanning:  { sx: 1.08, sy: 1.08, ring: 1, spark: 1, c: '#00F0FF' },
-    bored:     { sy: .72, dy: .06, lidL: .5, lidR: .5, c: '#94A3B8' },
+    happy:     { sy: 1, hapL: .85, hapR: .85, spark: 1, c: '#39FF14' },
+    bored:     { sy: .9, lidL: .55, lidR: .55, c: '#8B5CF6' },
     grumpy:    { sy: .7, dy: .05, lidL: .52, lidR: .45, angL: .55, angR: .55, c: '#FF5500' }   // mistura de bored + angry
   };
-  const LABELS = [['idle','Idle'],['thinking','Pensando'],['smirk','Deboche'],['wink','Piscada'],['angry','Bravo'],['surprised','Surpreso'],['evil','Malicioso'],['crying','Chorando'],['dead','Morto'],['glitch','Glitch']];
+  const LABELS = [['idle','Idle'],['thinking','Pensando'],['smirk','Deboche'],['wink','Piscada'],['angry','Bravo'],['surprised','Surpreso'],['evil','Malicioso'],['crying','Chorando'],['dead','Morto'],['glitch','Glitch'],['happy','Feliz'],['bored','Entediado']];
   const K = Object.keys(DEF).filter(k => k !== 'c').concat(['r', 'g', 'b']);
   const hex = h => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16));
 
@@ -225,7 +228,7 @@ let lockedMode = null;
   // cara de repouso: dormindo > hacker (7 s) > modo travado > idle
   function restMode() { return isSleeping ? 'sleep' : (grumpyOn() ? 'grumpy' : (shakeOn() ? 'glitch' : (faceDown ? 'bored' : (hackOn() ? 'hack' : (lockedMode || 'idle'))))); }
   function syncToggles() {
-    const st = { gamer: lockedMode === 'gamer', focus: lockedMode === 'focus', dance: lockedMode === 'dance', hack: hackOn(), sleep: isSleeping };
+    const st = { gamer: lockedMode === 'gamer', focus: lockedMode === 'focus', dance: lockedMode === 'dance', hack: hackOn(), sleep: isSleeping, comunista: isCommunist };
     for (const k in tbtn) tbtn[k].classList.toggle('on', !!st[k]);
   }
 
@@ -234,6 +237,7 @@ let lockedMode = null;
   function setMode(m) {
     mode = m;
     const d = Object.assign({}, DEF, MODES[m]);
+    if (isCommunist && m === 'idle') d.c = '#FF1E1E';   // camada comunista: olhos neutros ficam vermelhos
     const [r, g, b] = hex(d.c);
     Object.assign(T, d, { r, g, b });
     for (const k in buttons) buttons[k].classList.toggle('on', k === m);
@@ -298,6 +302,8 @@ let lockedMode = null;
     } else if (mode === 'sleep') pulse = Math.sin(t * 1.1) * .02;
     else if (mode === 'wake') pulse = Math.sin(t * 22) * .012;
     else if (mode === 'scanning') { lx = Math.sin(t * 3.2) * .9; ly = Math.cos(t * 2.1) * .15; pulse = Math.sin(t * 10) * .015; }
+    else if (mode === 'happy') { pulse = Math.sin(t * 6) * .02; bounce = -Math.abs(Math.sin(t * 3)) * .04; }
+    else if (mode === 'bored') { lx = .35; ly = -.45; }   // olhar para o canto superior
 
     kick *= Math.exp(-dt * 6);
     let amp = 0, waveMode = 0;
@@ -470,11 +476,12 @@ let lockedMode = null;
     ctx.shadowColor = '#FF2BD6'; ctx.shadowOffsetX = BIG + ab; blit(-BIG);
 
     ctx.globalCompositeOperation = 'source-over';
-    ctx.shadowColor = col; ctx.shadowBlur = (26 + P.glow * 44) * dpr * (batLow ? .5 : 1); ctx.shadowOffsetX = 0;
+    ctx.shadowColor = (isCommunist && mode === 'idle') ? '#FFD700' : col; ctx.shadowBlur = (26 + P.glow * 44) * dpr * (batLow ? .5 : 1); ctx.shadowOffsetX = 0;
     blit(0);
     ctx.shadowBlur = 0;
     drawFx(f, { eyeW, eyeH, cyy, rcx, rcy });
     drawWave(f, col, eyeW, eyeH, cyy);
+    if (isCommunist) drawCommunist(f, eyeW, eyeH, cyy);
   }
 
   /* ---------- Efeitos dos modos ---------- */
@@ -605,6 +612,59 @@ let lockedMode = null;
       ctx.shadowBlur = 0;
     }
 
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  let HS_PATH = null;   // símbolo ☭ (foice e martelo) como Path2D; null se o navegador não suportar
+  try { HS_PATH = new Path2D('M1000 1495Q1237 1495 1446 1306Q1596 1151 1596 936Q1596 735 1471 597L1665 449L1525 318H1522L1337 488Q1172 378 955 378Q785 378 642 466V463L382 0H379Q175 141 171 148Q197 173 542 581Q566 610 573 610Q686 525 844 525Q1035 525 1186 629L969 827L861 712H855Q668 828 659 840L892 1098Q1175 1084 1175 1079L1049 920Q1279 745 1308 731V733Q1374 823 1374 947V983Q1374 1237 1123 1338Q986 1407 867 1407H830Q732 1407 612 1352Q782 1495 1000 1495Z'); } catch (e) {}
+
+  function star5(c, x, y, R) {   // estrela de 5 pontas (só o caminho)
+    c.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? R * .42 : R;
+      if (i) c.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); else c.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    c.closePath();
+  }
+
+  // MODO COMUNISTA: boina vermelha com estrela sobre os olhos + foice e martelo dourados flutuando
+  function drawCommunist(f, eyeW, eyeH, cyy) {
+    const u = eyeW, A = f.alpha * (1 - P.slp * .6) * (1 - P.xx * .5);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; ctx.shadowBlur = 0;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+    // boina inclinada no topo dos olhos
+    const topY = cyy + (P.dy + f.bob) * eyeH + gY - eyeH * .5 * Math.max(P.sy, .9) * (1 + f.pulse) + eyeH * .06;
+    const bw = u * 1.2, bh = u * .44;
+    ctx.save();
+    ctx.translate(W / 2 + gX - u * .12, topY);
+    ctx.rotate(-.2);
+    ctx.globalAlpha = A;
+    ctx.lineWidth = Math.max(2, u * .035); ctx.strokeStyle = '#2B0A10';
+    ctx.fillStyle = '#D90429';
+    ctx.beginPath(); ctx.ellipse(0, -bh * .55, bw, bh * .78, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(bw * .1, -bh * 1.38, bh * .11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();   // pompom
+    ctx.fillStyle = '#B10321';
+    ctx.beginPath(); ctx.roundRect(-bw * .8, -bh * .18, bw * 1.6, bh * .34, bh * .14); ctx.fill(); ctx.stroke();   // faixa
+    ctx.fillStyle = '#FFD700'; ctx.lineWidth = Math.max(1.5, u * .02);
+    star5(ctx, -bw * .28, -bh * .62, bh * .34); ctx.fill(); ctx.stroke();                                         // estrela
+    ctx.restore();
+
+    // foice e martelo (contorno real do símbolo ☭) no canto superior direito, flutuando suavemente
+    if (HS_PATH) {
+      const sz = u * .6, k = sz / 1495;
+      const ex = Math.min(W - sz * .6, W / 2 + u * 1.55) + gX * .5, ey = cyy - eyeH * .98 + Math.sin(f.t * 1.3) * u * .04 + gY * .5;
+      ctx.save();
+      ctx.translate(ex, ey); ctx.rotate(Math.sin(f.t * .9) * .05);
+      ctx.globalAlpha = A * .92;
+      ctx.fillStyle = '#FFD700'; ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 8 * dpr;
+      ctx.scale(k, -k); ctx.translate(-918, -747.5);   // glifo em unidades de fonte (y para cima), centralizado
+      ctx.fill(HS_PATH);
+      ctx.restore();
+    }
     ctx.globalAlpha = 1; ctx.shadowBlur = 0;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
@@ -834,6 +894,7 @@ let lockedMode = null;
   }
 
   function speak(reply) {
+    reply = Object.assign({}, reply, { text: String(reply.text || '').replace(/\[[^\]]*\]/g, ' ').replace(/\[[^\]]*$/, '').replace(/\s+/g, ' ').trim() });   // nunca fala nem mostra tags
     const sid = session;
     let finished = false, usedNative = false;
     phase = 'speaking';
@@ -1174,6 +1235,21 @@ let lockedMode = null;
     if (lockedMode === m && !isSleeping) unlockNormal(); else lockMode(m);
   }
 
+  function setCommunist(v) {   // liga/desliga a camada comunista (não mexe em lockedMode nem nas expressões)
+    v = !!v;
+    if (v === isCommunist) return;
+    isCommunist = v;
+    syncToggles();
+    setMode(mode);   // reaplica a cor base
+  }
+  function detectCommunist(raw) {   // comandos de voz locais; a IA também manda [comunista] / [sair_comunista]
+    const t = normTxt(raw);
+    if (/\bmodo\s+comunista\b/.test(t) && /\b(?:desativ\w*|sa(?:i|ir|ia)|tir(?:a|ar)|desliga\w*|pare|chega|sem)\b/.test(t)) return 'off';
+    if (isCommunist && /\bpara\s+com\s+isso\b|\bvolt\w*\s+(?:ao|pro|pra|para o)\s+normal\b|\bmodo\s+normal\b/.test(t)) return 'off';
+    if (/\bmodo\s+comunista\b|\bcamarada\w*\b|\bviva\s+a\s+revolucao\b/.test(t)) return 'on';
+    return null;
+  }
+
   [['gamer', 'Chapa'], ['focus', 'Foco'], ['dance', 'Discoteca'], ['hack', 'Hacker'], ['sleep', 'Dormir']].forEach(([m, label]) => {
     const b = document.createElement('button');
     b.textContent = label;
@@ -1181,6 +1257,13 @@ let lockedMode = null;
     bar.appendChild(b);
     tbtn[m] = b;
   });
+  {
+    const cb = document.createElement('button');
+    cb.textContent = 'Comunista';
+    cb.addEventListener('click', e => { e.stopPropagation(); onFirstTap(); setCommunist(!isCommunist); notify(isCommunist ? 'Modo comunista ativado, camarada!' : 'Modo comunista desativado.', 2200); });
+    bar.appendChild(cb);
+    tbtn.comunista = cb;
+  }
   syncToggles();
 
   /* ---------- Voz (Fish Audio via Cloudflare Worker) ---------- */
@@ -1304,7 +1387,7 @@ let lockedMode = null;
   window.addEventListener('offline', renderHud);
 
   const WEATHER_URL = 'https://jarvis-api.emanuelpedro086.workers.dev/weather';
-  const EMO = 'idle|thinking|smirk|wink|angry|surprised|evil|crying|glitch';
+  const EMO = 'idle|thinking|smirk|wink|angry|surprised|evil|crying|glitch|happy|bored';
   const EMO_LIST = EMO.split('|');
   const MODE_LIST = ['gamer', 'focus', 'dance', 'hack', 'sleep', 'wakeup', 'normal'];
 
@@ -1342,7 +1425,8 @@ let lockedMode = null;
       .replace(/\[save:\s*([^\]]*)\]/gi, (_, f) => { addMem(f); return ' '; })
       .replace(/\[timer:\s*([^\]]*)\]/gi, (_, v) => { const n = parseFloat(String(v).replace(',', '.')); if (isFinite(n)) addTimer(n); return ' '; })
       .replace(/\[sarcasm:\s*([^\]]*)\]/gi, (_, v) => { if (!sarcLocal) { const n = parseFloat(String(v).replace(',', '.')); if (isFinite(n)) setSarcasm(n); } return ' '; })
-      .replace(/\[(?:save|timer|sarcasm):?[^\]]*$/i, '')
+      .replace(/\[(sair_comunista|comunista)\]/gi, (_, k) => { setCommunist(k.toLowerCase() === 'comunista'); return ' '; })
+      .replace(/\[(?:save|timer|sarcasm|sair_comunista|comunista):?[^\]]*$/i, '')
       .trim();
   }
 
@@ -1377,11 +1461,17 @@ let lockedMode = null;
       'Personalidade: irreverente, irônica, carismática e debochada, sem ser ofensivo. ' +
       'Nível de sarcasmo atual: ' + sarcasmLevel + '%. Se 0-30%, seja educado e direto; se 40-70%, irônico leve; se 80-100%, extremamente ácido, debochado e punk (sem ofender de verdade). ' +
       'Se o usuário pedir para mudar o sarcasmo (ex: "sarcasmo em 100%", "menos sarcasmo"), inclua no final da resposta a tag invisível [sarcasm: VALOR] com VALOR de 0 a 100 e confirme em poucas palavras; nunca mencione a tag. ' +
+      'Modo comunista atual: ' + (isCommunist ? 'ATIVO' : 'desativado') + '. Para ATIVAR, quando o usuário disser "modo comunista", "ativar modo comunista" ou te chamar de "camarada", "companheiro" ou fizer outra saudação revolucionária, inclua a tag [comunista] logo depois da tag de emoção. ' +
+      'Para DESATIVAR, quando disser "desativar modo comunista", "sair do modo comunista", "para com isso" ou "voltar ao normal", inclua a tag [sair_comunista]. Nunca use essas tags por conta própria e nunca as mencione. ' +
+      (isCommunist
+        ? 'Modo Comunista ATIVO: refira-se obrigatoriamente ao usuário e a todos como "camarada", usando um tom companheiro, revolucionário e bem-humorado (falando em "nossos sistemas", "nossa missão"). '
+        : 'Modo comunista desativado: NUNCA use esse personagem nem trate as pessoas por "camarada". ') +
       'Responda sempre em português brasileiro natural, em no máximo 2 frases curtas, porque sua resposta será falada em voz alta. ' +
       'Comece SEMPRE com exatamente uma tag de emoção entre colchetes, escolhida conforme o clima da resposta: ' +
       '[idle] neutro ou tranquilo, [thinking] refletindo ou entediado, [smirk] deboche ou sorriso de canto, ' +
       '[wink] cumplicidade ou piada interna, [angry] bravo ou irritado, [surprised] surpreso, ' +
-      '[evil] malicioso ou sarcasmo pesado, [crying] triste ou dramático, [glitch] caótico ou bugado. ' +
+      '[evil] malicioso ou sarcasmo pesado, [crying] triste ou dramático, [glitch] caótico ou bugado, ' +
+      '[happy] contente, animado ou comemorando algo, [bored] com tédio, preguiça ou desinteresse. ' +
       'Use somente essas tags de emoção, uma única vez, no início (exceto as tags de modo, [weather: ...], [save: ...] e [timer: ...], descritas abaixo). ' +
       'Você também controla modos especiais do robô. Para mudar de modo, escreva UMA tag de modo logo depois da tag de emoção, somente quando o usuário pedir claramente: ' +
       '[gamer] para o modo chapa/gamer ("vamos chapar", "modo gamer", "modo proibido"), ' +
@@ -1432,7 +1522,7 @@ let lockedMode = null;
     const tags = (raw.match(/\[[A-Za-z]+\]/g) || []).map(x => x.slice(1, -1).toLowerCase());
     const face = tags.find(x => EMO_LIST.includes(x)) || 'idle';
     const act = tags.find(x => MODE_LIST.includes(x)) || null;   // tag de modo (removida do texto abaixo)
-    const clean = raw.replace(/\[(?:weather|search|vision)[^\]]*\]?/gi, '').replace(/\[[A-Za-zÀ-ÿ]+\]/g, '').replace(/[*_#`]/g, '').replace(/\s+/g, ' ').trim();
+    const clean = raw.replace(/\[(?:weather|search|vision)[^\]]*\]?/gi, '').replace(/\[[A-Za-zÀ-ÿ_]+\]/g, '').replace(/[*_#`]/g, '').replace(/\s+/g, ' ').trim();
     return { face, text: clean, act };
   }
 
@@ -1476,6 +1566,8 @@ let lockedMode = null;
       sarcLocal = false;
       const ls = detectSarcasm(text);
       if (ls !== null) { setSarcasm(ls); sarcLocal = true; }   // vale já neste prompt
+      const cm = detectCommunist(text);
+      if (cm) setCommunist(cm === 'on');                         // modo comunista por voz (vale já neste prompt)
       let image = null, usedImage = false;
       if (VISION_RE.test(normTxt(text))) {   // gatilho por palavra-chave: captura ANTES de chamar /chat
         image = await captureRearCameraFrame();
