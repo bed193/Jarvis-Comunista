@@ -7,6 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>Jarvis</title>
 <style>
+  :root{--ac:224,36,168;--hudc:0,240,255}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
   html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:manipulation;overscroll-behavior:none;font-family:system-ui,-apple-system,Roboto,sans-serif;color:#fff}
   #c{position:fixed;inset:0;width:100%;height:100%;display:block;background:#000}
@@ -15,12 +16,12 @@
   #caption{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 110px);padding:0 24px;min-height:18px;text-align:center;font-size:14px;color:rgba(216,180,254,.5);pointer-events:none}
   #bar{position:fixed;left:0;right:0;bottom:0;display:flex;flex-wrap:nowrap;overflow-x:auto;justify-content:safe center;gap:8px;scrollbar-width:none;padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 12px)}
   #bar::-webkit-scrollbar{display:none}
-  #bar button{flex:none;white-space:nowrap;font:inherit;font-size:12px;padding:8px 12px;border-radius:999px;border:1px solid rgba(224,36,168,.3);background:rgba(255,255,255,.05);color:rgba(255,160,230,.65);cursor:pointer}
-  #bar button.on{background:rgba(224,36,168,.3);color:#fff}
-  #memBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 46px);left:8px;font:inherit;font-size:10px;padding:5px 9px;border-radius:999px;border:1px solid rgba(224,36,168,.22);background:transparent;color:rgba(255,160,230,.4);opacity:.55;cursor:pointer}
+  #bar button{flex:none;white-space:nowrap;font:inherit;font-size:12px;padding:8px 12px;border-radius:999px;border:1px solid rgba(var(--ac),.3);background:rgba(255,255,255,.05);color:rgba(255,160,230,.65);cursor:pointer}
+  #bar button.on{background:rgba(var(--ac),.3);color:#fff}
+  #memBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 78px);left:8px;font:inherit;font-size:10px;padding:5px 9px;border-radius:999px;border:1px solid rgba(var(--ac),.22);background:transparent;color:rgba(255,160,230,.4);opacity:.55;cursor:pointer}
   #memBtn:active{opacity:1}
-  #crt{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 52%,rgba(0,0,0,.72) 100%),repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.22) 2px 3px)}
-  .hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);font:10px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.08em;color:rgba(0,240,255,.62);text-shadow:0 0 6px rgba(0,240,255,.45);pointer-events:none;white-space:pre}
+  #crt{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 52%,rgba(0,0,0,.72) 100%),repeating-linear-gradient(to bottom,rgba(var(--hudc),.05) 0 1px,rgba(0,0,0,0) 1px 3px),repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.22) 2px 3px)}
+  .hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);font:10px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.08em;color:rgba(var(--hudc),.62);text-shadow:0 0 6px rgba(var(--hudc),.45);pointer-events:none;white-space:pre}
   #hudL{left:12px}
   #hudR{right:12px;text-align:right}
   .hud .warn{color:rgba(250,204,21,.9)}
@@ -30,7 +31,22 @@
   .hud.flash{animation:hudflash .3s 6}
   #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:50;transition:opacity .5s ease-out}
   #flash.snap{opacity:.92;transition:none}
+  #camBtn,#tasksBtn{position:fixed;left:6px;width:104px;height:18px;padding:0;border:0;background:transparent;opacity:0;cursor:pointer;z-index:5}
+  #camBtn{top:calc(env(safe-area-inset-top,0px) + 39px)}
+  #tasksBtn{top:calc(env(safe-area-inset-top,0px) + 54px)}
+  #actBtn{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 72px);display:none;z-index:40;font:inherit;font-size:13px;padding:10px 16px;border-radius:999px;border:1px solid rgba(var(--hudc),.6);background:rgba(0,20,30,.88);color:#7ff;cursor:pointer}
+  #actBtn.on{display:block}
+  #tasksModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.72);z-index:60}
+  #tasksModal.open{display:flex}
+  #tasksModal .card{min-width:260px;max-width:88vw;max-height:70vh;overflow:auto;padding:14px 16px;border:1px solid rgba(var(--hudc),.4);border-radius:10px;background:#05070d;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:rgba(var(--hudc),.88)}
+  #tasksModal .ttl{letter-spacing:.12em;margin-bottom:8px;color:rgba(250,204,21,.9)}
+  #tasksModal ul{list-style:none;margin:0;padding:0}
+  #tasksModal li{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(var(--hudc),.15)}
+  #tasksModal button{font:inherit;font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid rgba(var(--hudc),.4);background:transparent;color:rgba(var(--hudc),.85);cursor:pointer}
+  #tasksModal .foot{margin-top:10px;text-align:right}
   #sarcBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 24px);right:6px;width:104px;height:18px;padding:0;border:0;background:transparent;opacity:0;cursor:pointer;z-index:5}
+  #themeBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 44px);left:50%;transform:translateX(-50%);font:10px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.08em;padding:4px 10px;border-radius:999px;border:1px solid rgba(var(--ac),.3);background:transparent;color:rgba(var(--ac),.75);opacity:.6;cursor:pointer;z-index:5;white-space:nowrap}
+  #themeBtn:active{opacity:1}
 </style>
 </head>
 <body>
@@ -44,6 +60,11 @@
 <canvas id="camCanvas" style="display:none"></canvas>
 <button id="memBtn" type="button" title="Apagar as memórias permanentes do Jarvis">limpar memória</button>
 <button id="sarcBtn" type="button" aria-label="Nível de sarcasmo"></button>
+<button id="themeBtn" type="button">TEMA 1: PUNK</button>
+<button id="camBtn" type="button" aria-label="Alternar câmera padrão"></button>
+<button id="tasksBtn" type="button" aria-label="Ver tarefas"></button>
+<button id="actBtn" type="button"></button>
+<div id="tasksModal"><div class="card"><div class="ttl">TAREFAS PENDENTES</div><ul id="tasksList"></ul><div class="foot"><button id="tasksClose" type="button">fechar</button></div></div></div>
 <div id="caption">Toque na tela para falar</div>
 <div id="bar"></div>
 
@@ -163,6 +184,28 @@ let isCommunist = false;
     } catch (e) {}
   }
 
+  function playAnimeSound(kind) {   // som de ativação dos modos de anime (OscillatorNode)
+    if (!actx) return;
+    try {
+      if (actx.state === 'suspended') actx.resume().catch(() => {});
+      const t0 = actx.currentTime + .02;
+      const tone = (type, f0, f1, t, dur, vol, dest) => {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + Math.min(.04, dur / 3)); g.gain.linearRampToValueAtTime(0.0001, t + dur);
+        o.connect(g); g.connect(dest || actx.destination); o.start(t); o.stop(t + dur + .03);
+      };
+      if (kind === 'banguela') { tone('sawtooth', 48, 190, t0, 1, .1); tone('sine', 96, 380, t0, 1, .13); tone('triangle', 52, 210, t0 + .05, .95, .08); }   // carga de plasma
+      else if (kind === 'gear5') { [[0, 1], [.18, 1], [.38, 0], [.5, 0]].forEach(([d, k]) => k ? tone('sine', 150, 45, t0 + d, .16, .35) : tone('square', 520, 380, t0 + d, .07, .09)); }   // tum-tum-ta-ta
+      else if (kind === 'asta') {   // impacto grave distorcido
+        const ws = actx.createWaveShaper(), cur = new Float32Array(256);
+        for (let i = 0; i < 256; i++) cur[i] = Math.tanh((i / 128 - 1) * 6);
+        ws.curve = cur; ws.connect(actx.destination);
+        tone('sawtooth', 90, 32, t0, .7, .2, ws); tone('square', 60, 28, t0, .6, .12, ws);
+      }
+    } catch (e) {}
+  }
+
   /* ---------- Canvas ---------- */
   const cv = document.getElementById('c');
   const ctx = cv.getContext('2d');
@@ -180,7 +223,7 @@ let isCommunist = false;
   resize();
 
   /* ---------- Estados e emoções ---------- */
-  const DEF = { sx: 1, sy: 1, dy: 0, lidL: 0, lidR: 0, hapL: 0, hapR: 0, angL: 0, angR: 0, spark: 0, fury: 0, horns: 0, tears: 0, xx: 0, joint: 0, ring: 0, slp: 0, rain: 0, dance: 0, glow: 0, c: '#E024A8' };
+  const DEF = { sx: 1, sy: 1, dy: 0, lidL: 0, lidR: 0, hapL: 0, hapR: 0, angL: 0, angR: 0, spark: 0, fury: 0, horns: 0, tears: 0, xx: 0, joint: 0, ring: 0, slp: 0, rain: 0, dance: 0, glow: 0, ban: 0, g5: 0, ast: 0, slit: 0, c: '#E024A8' };
   const MODES = {
     idle:      { sy: .82, lidL: .18, lidR: .18, spark: 1 },
     listening: { sx: 1.12, sy: 1.15, spark: .6, c: '#FF4FD8' },
@@ -198,6 +241,9 @@ let isCommunist = false;
     dance:     { sy: 1.02, spark: 1, dance: 1, c: '#FF00FF' },
     hack:      { sy: .72, lidL: .42, lidR: .42, rain: 1, c: '#00FF41' },
     sleep:     { slp: 1, c: '#4C1D95' },
+    banguela:  { sy: .95, ban: 1, c: '#A855F7' },
+    gear5:     { sx: 1.05, sy: 1.05, g5: 1, c: '#FFFFFF' },
+    asta:      { sy: .8, angL: .75, angR: .75, ast: 1, c: '#EF4444' },
     wake:      { sx: 1.08, sy: 1.38, spark: 1, glow: 1, c: '#F5E9FF' },
     scanning:  { sx: 1.08, sy: 1.08, ring: 1, spark: 1, c: '#00F0FF' },
     happy:     { sy: 1, hapL: .85, hapR: .85, spark: 1, c: '#39FF14' },
@@ -207,6 +253,27 @@ let isCommunist = false;
   const LABELS = [['idle','Idle'],['thinking','Pensando'],['smirk','Deboche'],['wink','Piscada'],['angry','Bravo'],['surprised','Surpreso'],['evil','Malicioso'],['crying','Chorando'],['dead','Morto'],['glitch','Glitch'],['happy','Feliz'],['bored','Entediado']];
   const K = Object.keys(DEF).filter(k => k !== 'c').concat(['r', 'g', 'b']);
   const hex = h => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16));
+
+  /* ---------- Sistema de Armaduras / Temas ---------- */
+  const THEMES = ['punk', 'stark', 'edgerunner', 'stealth'];
+  const THEME_DEF = {
+    punk:       { n: 'PUNK',       a: '#E024A8', b: '#00F0FF', glow: 1 },
+    stark:      { n: 'MARK VII',   a: '#FACC15', b: '#EF4444', glow: 1 },
+    edgerunner: { n: 'EDGERUNNER', a: '#FCEE09', b: '#39FF14', glow: 1 },
+    stealth:    { n: 'STEALTH',    a: '#E2E8F0', b: '#38BDF8', glow: .5 }
+  };
+  const THEME_KEY = 'jarvis_theme';
+  const ANIME = ['banguela', 'gear5', 'asta'];
+  let themeId = 'punk', THEME = THEME_DEF.punk;
+  try { const sv = localStorage.getItem(THEME_KEY); if (THEMES.includes(sv)) themeId = sv; } catch (e) {}
+  function setThemeVisual(id) {
+    themeId = id; THEME = THEME_DEF[id];
+    const rs = document.documentElement.style;
+    rs.setProperty('--ac', hex(THEME.a).join(',')); rs.setProperty('--hudc', hex(THEME.b).join(','));
+    const tb = document.getElementById('themeBtn');
+    if (tb) tb.textContent = 'TEMA ' + (THEMES.indexOf(id) + 1) + ': ' + THEME.n;
+  }
+  setThemeVisual(themeId);
 
   const bar = document.getElementById('bar');
   const buttons = {};
@@ -228,7 +295,7 @@ let isCommunist = false;
   // cara de repouso: dormindo > hacker (7 s) > modo travado > idle
   function restMode() { return isSleeping ? 'sleep' : (grumpyOn() ? 'grumpy' : (shakeOn() ? 'glitch' : (faceDown ? 'bored' : (hackOn() ? 'hack' : (lockedMode || 'idle'))))); }
   function syncToggles() {
-    const st = { gamer: lockedMode === 'gamer', focus: lockedMode === 'focus', dance: lockedMode === 'dance', hack: hackOn(), sleep: isSleeping, comunista: isCommunist };
+    const st = { gamer: lockedMode === 'gamer', focus: lockedMode === 'focus', dance: lockedMode === 'dance', hack: hackOn(), sleep: isSleeping, comunista: isCommunist, banguela: lockedMode === 'banguela', gear5: lockedMode === 'gear5', asta: lockedMode === 'asta' };
     for (const k in tbtn) tbtn[k].classList.toggle('on', !!st[k]);
   }
 
@@ -237,6 +304,12 @@ let isCommunist = false;
   function setMode(m) {
     mode = m;
     const d = Object.assign({}, DEF, MODES[m]);
+    if (m === 'idle' && !lockedMode) d.c = THEME.a;   // cor base da armadura equipada
+    if (ANIME.includes(lockedMode)) {   // modo de anime: sobreposições próprias; expressões fortes mantêm a própria cor
+      d.ban = lockedMode === 'banguela' ? 1 : 0; d.g5 = lockedMode === 'gear5' ? 1 : 0; d.ast = lockedMode === 'asta' ? 1 : 0;
+      if (!['angry', 'scanning', 'sleep', 'dead', 'glitch', 'grumpy', 'surprised', 'crying', 'evil'].includes(m)) d.c = MODES[lockedMode].c;
+      if (d.ban) { const hot = m === 'angry' || m === 'evil'; if (hot) d.c = '#38BDF8'; d.slit = (hot || m === 'scanning') ? 1 : 0; }
+    }
     if (isCommunist && m === 'idle') d.c = '#FF1E1E';   // camada comunista: olhos neutros ficam vermelhos
     const [r, g, b] = hex(d.c);
     Object.assign(T, d, { r, g, b });
@@ -253,6 +326,7 @@ let isCommunist = false;
   let blinkStart = -1, nextBlink = 2.5;
   let idleLook = { x: 0, y: 0 }, looking = false, nextLook = 3;
   let jitV = 0, nextJit = 0, flick = 0, nextCol = 0, gcols = ['#FF007F', '#00F0FF'];
+  let saccX = 0, saccY = 0, saccTX = 0, saccTY = 0, saccOn = false, nextSacc = 3;   // sacadas oculares
 
   function frame(ts) {
     const t = ts / 1000;
@@ -304,6 +378,9 @@ let isCommunist = false;
     else if (mode === 'scanning') { lx = Math.sin(t * 3.2) * .9; ly = Math.cos(t * 2.1) * .15; pulse = Math.sin(t * 10) * .015; }
     else if (mode === 'happy') { pulse = Math.sin(t * 6) * .02; bounce = -Math.abs(Math.sin(t * 3)) * .04; }
     else if (mode === 'bored') { lx = .35; ly = -.45; }   // olhar para o canto superior
+    else if (mode === 'banguela') { lx = Math.sin(t * .8) * .25; ly = Math.cos(t * .6) * .1; pulse = Math.sin(t * 2.2) * .01; }
+    else if (mode === 'gear5') { bounce = -Math.abs(Math.sin(ts * .015)) * .06; }
+    else if (mode === 'asta') { pulse = Math.sin(t * 5) * .012; shake = Math.sin(t * 27) * .004; }
 
     kick *= Math.exp(-dt * 6);
     let amp = 0, waveMode = 0;
@@ -330,6 +407,13 @@ let isCommunist = false;
     const kl = 1 - Math.exp(-dt * (mode === 'idle' ? 14 : 7));
     P.lx += (lx - P.lx) * kl;
     P.ly += (ly - P.ly) * kl;
+    if (mode === 'idle' && !isSleeping) {   // micro-sacadas: a cada 2-5 s o olhar desloca ±8 px por 400 ms
+      if (t > nextSacc) {
+        if (saccOn) { saccOn = false; saccTX = saccTY = 0; nextSacc = t + rand(2, 5); }
+        else { saccOn = true; saccTX = rand(-8, 8); saccTY = rand(-8, 8); nextSacc = t + .4; }
+      }
+    } else { saccOn = false; saccTX = saccTY = 0; }
+    saccX += (saccTX - saccX) * (1 - Math.exp(-dt * 22)); saccY += (saccTY - saccY) * (1 - Math.exp(-dt * 22));
     const kg = 1 - Math.exp(-dt * 6);
     gX += (gTx - gX) * kg; gY += (gTy - gY) * kg;
 
@@ -354,6 +438,7 @@ let isCommunist = false;
     let cols = [col, col];
     if (mode === 'glitch') cols = gcols;
     else if (mode === 'dance') { cols = [danceCol(f.t * 1.7), danceCol(f.t * 1.7 + 2)]; col = cols[0]; }
+    if (P.ban > .5 && talking && f.amp > .55) { col = '#38BDF8'; cols = [col, col]; }   // Banguela falando forte: azul Alfa
 
     oc.setTransform(dpr, 0, 0, dpr, 0, 0);
     oc.globalCompositeOperation = 'source-over';
@@ -361,15 +446,16 @@ let isCommunist = false;
     oc.clearRect(0, 0, W, H);
     oc.lineCap = 'round';
 
-    let rcx = 0, rcy = 0;
+    let rcx = 0, rcy = 0, lcx = 0;
     for (let i = 0; i < 2; i++) {
       const s = i ? 1 : -1;
-      const w = eyeW * P.sx * (1 + f.pulse);
-      const h = eyeH * P.sy * (1 + f.pulse) * Math.max(f.open, .04);
-      const cx = W / 2 + s * (eyeW / 2 + gap / 2) + P.lx * eyeW * .45 + (f.shake + f.jit) * eyeW + gX;
-      const cy = cyy + P.ly * eyeH * .3 + (f.bob + P.dy) * eyeH + gY;
+      const el = P.g5 * Math.sin(f.ts * .015);   // Gear 5: estica e achata como borracha
+      const w = eyeW * P.sx * (1 + f.pulse) * (1 + el * .12);
+      const h = eyeH * P.sy * (1 + f.pulse) * Math.max(f.open, .04) * (1 - el * .16);
+      const cx = W / 2 + s * (eyeW / 2 + gap / 2) + P.lx * eyeW * .45 + (f.shake + f.jit) * eyeW + gX + saccX;
+      const cy = cyy + P.ly * eyeH * .3 + (f.bob + P.dy) * eyeH + gY + saccY;
       const lid = i ? P.lidR : P.lidL, hap = i ? P.hapR : P.hapL, ang = i ? P.angR : P.angL;
-      if (i) { rcx = cx; rcy = cy; }
+      if (i) { rcx = cx; rcy = cy; } else lcx = cx;
 
       // olho
       oc.globalCompositeOperation = 'source-over';
@@ -396,6 +482,12 @@ let isCommunist = false;
         const rr = w * .85, topY = cy + h / 2 - Math.min(hap, .95) * h * .62;
         oc.beginPath(); oc.arc(cx, topY + rr, rr, 0, Math.PI * 2); oc.fill();
       }
+      if (P.ban > .01) {   // pupila reptiliana: larga e redonda, vira fenda em angry/scanning
+        oc.globalAlpha = P.ban;
+        oc.beginPath(); oc.ellipse(cx + P.lx * w * .1, cy, w * (.3 - .24 * P.slit), h * (.32 + .1 * P.slit), 0, 0, 6.2832); oc.fill();
+        oc.globalAlpha = 1;
+      }
+      if (i && P.ast > .01) { oc.globalAlpha = P.ast; star(oc, cx, cy, w * .46); oc.globalAlpha = 1; }   // estrela negra de 4 pontas
       if (i) {
         oc.lineWidth = Math.max(2, eyeW * .05);
         oc.beginPath(); oc.moveTo(cx + w * .55, cy - h * .02); oc.lineTo(cx + w * .08, cy - h * .62); oc.stroke();
@@ -405,6 +497,10 @@ let isCommunist = false;
       oc.globalCompositeOperation = 'source-over';
       oc.fillStyle = oc.strokeStyle = cols[i];
       const A = f.alpha;
+      if (P.g5 > .01) {   // contorno prata
+        oc.globalAlpha = P.g5 * A; oc.strokeStyle = '#C7CDD6'; oc.lineWidth = Math.max(2, eyeW * .035);
+        oc.beginPath(); oc.roundRect(cx - w / 2, cy - h / 2, w, h, Math.min(w * .42, h / 2)); oc.stroke(); oc.strokeStyle = cols[i];
+      }
       if (P.xx > .01) {
         const d = w * .32;
         oc.globalAlpha = P.xx * A; oc.lineWidth = eyeW * .09;
@@ -461,25 +557,27 @@ let isCommunist = false;
         ctx.drawImage(off, sx, by, cw, bh, sx + dx + sh[b], by, cw, bh);
       }
     };
-    const ab = (2 + f.gl * 5 * Math.random()) * dpr;
+    const ab = (2 + f.gl * 5 * Math.random() + (themeId === 'punk' && !ANIME.includes(lockedMode) ? f.amp * 6 : 0)) * dpr;   // punk: aberração na batida da voz
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, cv.width, cv.height);
+    drawBackdrop(f, eyeW, eyeH, cyy);   // clima, relógio e efeitos da armadura
     if (P.rain > .02) drawRain(f);   // chuva de 0 e 1 no fundo (modo hacker)
 
     ctx.globalCompositeOperation = 'lighter';
-    ctx.shadowBlur = 6 * dpr * (batLow ? .5 : 1);
-    ctx.shadowColor = '#00F0FF'; ctx.shadowOffsetX = BIG - ab; blit(-BIG);
-    ctx.shadowColor = '#FF2BD6'; ctx.shadowOffsetX = BIG + ab; blit(-BIG);
+    const gm = (batLow ? .5 : 1) * THEME.glow, breath = mode === 'idle' ? 1 + .18 * Math.sin(f.ts * .003) : 1;
+    ctx.shadowBlur = 6 * dpr * gm;
+    ctx.shadowColor = THEME.b; ctx.shadowOffsetX = BIG - ab; blit(-BIG);
+    ctx.shadowColor = THEME.a; ctx.shadowOffsetX = BIG + ab; blit(-BIG);
 
     ctx.globalCompositeOperation = 'source-over';
-    ctx.shadowColor = (isCommunist && mode === 'idle') ? '#FFD700' : col; ctx.shadowBlur = (26 + P.glow * 44) * dpr * (batLow ? .5 : 1); ctx.shadowOffsetX = 0;
+    ctx.shadowColor = (isCommunist && mode === 'idle') ? '#FFD700' : col; ctx.shadowBlur = (26 + P.glow * 44) * dpr * gm * breath; ctx.shadowOffsetX = 0;
     blit(0);
     ctx.shadowBlur = 0;
-    drawFx(f, { eyeW, eyeH, cyy, rcx, rcy });
+    drawFx(f, { eyeW, eyeH, cyy, rcx, rcy, lcx });
     drawWave(f, col, eyeW, eyeH, cyy);
     if (isCommunist) drawCommunist(f, eyeW, eyeH, cyy);
   }
@@ -517,6 +615,162 @@ let isCommunist = false;
       }
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  /* ---------- Fundo vivo: clima, relógio e efeitos das armaduras ---------- */
+  let lastWeatherData = null;
+  const RAIN_CODES = c => (c >= 51 && c <= 67) || (c >= 80 && c <= 82) || c >= 95;
+  function weatherKind() {
+    const w = lastWeatherData, h = new Date().getHours();
+    if (w && ((w.rain !== null && w.rain >= 50) || (w.code !== null && RAIN_CODES(w.code)) || w.precip > 0)) return 'rain';
+    if (w && w.temp >= 27 && h >= 6 && h < 18) return 'heat';
+    if (h < 5 || h >= 19) return 'stars';
+    return '';
+  }
+  const wp = Array.from({ length: 44 }, () => ({ x: Math.random(), y: Math.random(), v: rand(.5, 1.1), s: Math.random(), ph: rand(0, 6.28) }));
+  const trail = [];   // Sandevistan: últimas 4 posições dos olhos
+  let brk = 0;        // Stark: fechamento dos colchetes de mira
+
+  function drawBackdrop(f, eyeW, eyeH, cyy) {
+    const t = f.t, dt = f.dt, anime = ANIME.includes(lockedMode), ca = hex(THEME.a);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'source-over'; ctx.shadowBlur = 0; ctx.lineCap = 'round';
+    const wk = weatherKind(), nw = wk === 'rain' ? 40 : wk === 'heat' ? 30 : wk === 'stars' ? 44 : 0;
+    for (let i = 0; i < nw; i++) {
+      const p = wp[i], x = p.x * W;
+      if (wk === 'rain') {
+        p.y += p.v * dt * .9; if (p.y > 1.05) { p.y = -.05; p.x = Math.random(); }
+        ctx.globalAlpha = .12 + .12 * p.s; ctx.strokeStyle = THEME.b; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, p.y * H); ctx.lineTo(x - 1, p.y * H + 10 + p.s * 14); ctx.stroke();
+      } else if (wk === 'heat') {
+        p.y -= p.v * dt * .035; if (p.y < -.05) { p.y = 1.05; p.x = Math.random(); }
+        ctx.globalAlpha = .06 + .22 * (.5 + .5 * Math.sin(p.ph + t * .9)); ctx.fillStyle = '#FACC15';
+        ctx.beginPath(); ctx.arc(x + Math.sin(t * .5 + p.ph) * 6, p.y * H, 1 + p.s * 1.6, 0, 6.2832); ctx.fill();
+      } else {
+        ctx.globalAlpha = .06 + .36 * (.5 + .5 * Math.sin(t * .7 + p.ph * 3)); ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath(); ctx.arc(x, p.y * H, .7 + p.s * 1.1, 0, 6.2832); ctx.fill();
+      }
+    }
+    const d = new Date(), tx = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + (lastWeatherData ? ' • ' + Math.round(lastWeatherData.temp) + '°C' : '');
+    ctx.globalAlpha = 1; ctx.font = 'bold ' + Math.max(18, Math.min(W * .085, H * .06)) + 'px ui-monospace, Menlo, Consolas, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(' + ca.join(',') + ',0.14)';
+    ctx.fillText(tx, W / 2, H * .17);   // relógio + temperatura: marca d'água holográfica
+
+    if (!anime) {
+      if (themeId === 'stark') {   // Reator Arc: dois anéis segmentados em direções opostas
+        const cx = W / 2 + gX * .4, cy = cyy + gY * .4;
+        const ring = (r, n, rot, c, al, lw) => { ctx.strokeStyle = c; ctx.globalAlpha = al; ctx.lineWidth = lw; const st = 6.2832 / n; for (let k = 0; k < n; k++) { ctx.beginPath(); ctx.arc(cx, cy, r, rot + k * st, rot + k * st + st * .68); ctx.stroke(); } };
+        ring(eyeW * 1.42, 10, t * .6, THEME.a, .3, Math.max(2, eyeW * .045));
+        ring(eyeW * 1.1, 8, -t * .9, THEME.b, .34, Math.max(1.5, eyeW * .03));
+        ctx.globalAlpha = .05; ctx.fillStyle = THEME.a; ctx.beginPath(); ctx.arc(cx, cy, eyeW * .6, 0, 6.2832); ctx.fill();
+      } else if (themeId === 'stealth') {   // pulso de sonar a cada 4 s
+        const u = (t % 4) / 4;
+        ctx.globalAlpha = (1 - u) * .22; ctx.strokeStyle = THEME.b; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(W / 2, H / 2, (1 - (1 - u) * (1 - u)) * Math.max(W, H) * .6, 0, 6.2832); ctx.stroke();
+      }
+      if (themeId === 'edgerunner') {   // rastro Sandevistan
+        const cur = { x: P.lx * eyeW * .45 + gX + saccX, y: P.ly * eyeH * .3 + gY + saccY, t }, lp = trail[trail.length - 1];
+        if (!lp || (t - lp.t > .06 && Math.hypot(cur.x - lp.x, cur.y - lp.y) > 5)) { trail.push(cur); if (trail.length > 4) trail.shift(); }
+        const w = eyeW * P.sx, h = eyeH * P.sy * Math.max(f.open, .04);
+        trail.forEach((gh, k) => {
+          const al = Math.max(0, .26 * (1 - (t - gh.t) / .8)) * (k + 1) / 4;
+          if (al < .01) return;
+          ctx.globalAlpha = al; ctx.fillStyle = k % 2 ? '#39FF14' : '#00F0FF';
+          for (const s of [-1, 1]) { ctx.beginPath(); ctx.roundRect(W / 2 + s * (eyeW * .85) + gh.x - w / 2, cyy + gh.y + (P.dy + f.bob) * eyeH - h / 2, w, h, Math.min(w * .42, h / 2)); ctx.fill(); }
+        });
+      } else trail.length = 0;
+    }
+    ctx.globalAlpha = 1; ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  /* partículas genéricas (faíscas, estrelas, brasas) */
+  const pts = [];
+  function emit(o) { if (pts.length < 140) pts.push(Object.assign({ x: 0, y: 0, vx: 0, vy: 0, g: 0, age: 0, life: 1, r: 2, c: '#fff', k: 'dot' }, o)); }
+  function circ(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); }
+  function stepPts(f) {
+    for (let i = pts.length - 1; i >= 0; i--) {
+      const p = pts[i]; p.age += f.dt;
+      if (p.age >= p.life) { pts.splice(i, 1); continue; }
+      p.vy += p.g * f.dt; p.x += p.vx * f.dt; p.y += p.vy * f.dt;
+      const u = p.age / p.life; ctx.globalAlpha = (1 - u) * .9 * f.alpha;
+      if (p.k === 'star') { ctx.fillStyle = p.c; star5(ctx, p.x, p.y, p.r * (1 + Math.sin(p.age * 14) * .15)); ctx.fill(); }
+      else if (p.k === 'ember') { ctx.fillStyle = 'rgba(239,68,68,.35)'; circ(p.x, p.y, p.r * 2.2); ctx.fillStyle = '#05000a'; circ(p.x, p.y, p.r); ctx.strokeStyle = 'rgba(239,68,68,.8)'; ctx.lineWidth = 1; ctx.stroke(); }
+      else { ctx.fillStyle = p.c; circ(p.x, p.y, p.r * (1 - u * .4)); }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawThemeFx(f, g) {
+    const { eyeW, eyeH, cyy, rcx, rcy } = g;
+    if (ANIME.includes(lockedMode)) return;
+    if (themeId === 'punk' && Math.random() < f.dt * .9) {   // micro-faíscas saindo da cicatriz digital
+      for (let n = 0, m = 2 + ((Math.random() * 3) | 0); n < m; n++) emit({ x: rcx + eyeW * .3, y: rcy - eyeH * .3, vx: rand(-60, 60), vy: -rand(20, 90), g: 220, life: rand(.25, .5), r: rand(1, 2), c: Math.random() < .5 ? '#00F0FF' : '#FF2BD6' });
+    }
+    if (themeId === 'stark') {   // colchetes de mira: fecham levemente ao ouvir
+      brk += ((mode === 'listening' ? 1 : 0) - brk) * (1 - Math.exp(-f.dt * 8));
+      const bx = eyeW * 1.78 - brk * eyeW * .14, hh = eyeH * .62, arm = eyeW * .16;
+      ctx.lineWidth = Math.max(2, eyeW * .03); ctx.lineJoin = 'round';
+      for (const s of [-1, 1]) {
+        const x = W / 2 + s * bx + gX * .6;
+        ctx.globalAlpha = .75 * f.alpha; ctx.strokeStyle = THEME.a;
+        ctx.beginPath(); ctx.moveTo(x - s * arm, cyy - hh); ctx.lineTo(x, cyy - hh); ctx.lineTo(x, cyy + hh); ctx.lineTo(x - s * arm, cyy + hh); ctx.stroke();
+        ctx.strokeStyle = THEME.b; ctx.beginPath(); ctx.moveTo(x, cyy); ctx.lineTo(x - s * arm * .6, cyy); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  let nextHaki = 2, hakiUntil = 0, nextSlash = 2, slashT = -9, slashFlip = 1;
+  function drawAnime(f, g) {
+    const { eyeW, eyeH, cyy, rcx, rcy, lcx } = g, t = f.t;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (P.ban > .5 && (mode === 'angry' || mode === 'evil' || (talking && f.amp > .5)) && Math.random() < f.dt * 28) {   // faíscas de plasma
+      emit({ x: W / 2 + rand(-1.5, 1.5) * eyeW, y: cyy + rand(-.6, .8) * eyeH, vx: rand(-25, 25), vy: -rand(20, 70), life: rand(.9, 1.6), r: rand(1.5, 3.5), c: Math.random() < .5 ? '#A855F7' : '#38BDF8' });
+    }
+    if (P.g5 > .5) {
+      if (Math.random() < f.dt * 1.6) emit({ k: 'star', x: Math.random() < .5 ? rand(.05, .16) * W : rand(.84, .95) * W, y: Math.random() < .5 ? H * .3 : H * .78, vx: rand(-40, 40), vy: -rand(170, 260), g: 460, life: 1.1, r: rand(6, 10), c: Math.random() < .5 ? '#FFFFFF' : '#FDE68A' });
+      ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(255,255,255,' + (.2 * P.g5) + ')';   // vapor no topo do visor
+      for (let k = 0; k < 7; k++) {
+        const bx = ((k * W / 6 + t * 16) % (W + 160)) - 80, by = H * .018 + Math.sin(t * .8 + k) * H * .006, rr = eyeW * .26 * (.85 + .15 * Math.sin(t * 1.3 + k * 2));
+        circ(bx - rr, by, rr * .8); circ(bx, by - rr * .3, rr * 1.1); circ(bx + rr, by, rr * .8);
+      }
+      ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = Math.max(2, eyeW * .04); ctx.globalAlpha = .9 * P.g5 * f.alpha;   // sobrancelhas em espiral
+      [lcx, rcx].forEach((x, i) => {
+        const y = rcy - eyeH * .5 * Math.max(P.sy, .6) - eyeW * .3 + Math.sin(t * 3 + i * 2) * eyeW * .05, r = eyeW * .17, rot = t * (i ? 3 : -3);
+        ctx.beginPath();
+        for (let a = 0; a <= 12.5; a += .3) { const rr = r * a / 12.5, px = x + Math.cos(a + rot) * rr, py = y + Math.sin(a + rot) * rr; a ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+        ctx.stroke();
+      });
+      if (t > nextHaki) { hakiUntil = t + .14; nextHaki = t + rand(2.5, 5); }
+      if (t < hakiUntil) {   // raio de Haki: vermelho com núcleo preto
+        const x0 = Math.random() < .5 ? 0 : W, y0 = rand(0, H * .3);
+        ctx.beginPath(); ctx.moveTo(x0, y0);
+        for (let k = 1; k <= 7; k++) ctx.lineTo(x0 + (W / 2 - x0) * k / 7 * .8 + rand(-18, 18), y0 + (cyy - y0) * k / 7 + rand(-18, 18));
+        ctx.globalAlpha = 1; ctx.strokeStyle = '#EF4444'; ctx.shadowColor = '#EF4444'; ctx.shadowBlur = 10 * dpr; ctx.lineWidth = 5; ctx.stroke();
+        ctx.shadowBlur = 0; ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+      }
+    }
+    if (P.ast > .01) {
+      if (P.ast > .5 && Math.random() < f.dt * 22) emit({ k: 'ember', x: rand(0, W), y: H + 6, vx: rand(-15, 15), vy: -rand(60, 150), life: rand(1.6, 2.8), r: rand(2, 5) });   // Antimagia subindo
+      const u = Math.min(W, H) * .1, ax = W - u * 2.3, ay = u * 3.3 + 28, fl = .75 + .25 * Math.sin(t * 9) + (Math.random() - .5) * .08;
+      ctx.save(); ctx.globalAlpha = P.ast * fl * f.alpha; ctx.fillStyle = '#0a0005'; ctx.strokeStyle = '#EF4444'; ctx.lineWidth = 2.2; ctx.shadowColor = '#EF4444'; ctx.shadowBlur = 14 * dpr;
+      ctx.beginPath(); ctx.moveTo(ax, ay);   // chifre/asa de energia no canto superior direito
+      ctx.quadraticCurveTo(ax + u * .2, ay - u * 1.6, ax + u * 1.5, ay - u * 2.9);
+      ctx.quadraticCurveTo(ax + u * 1.0, ay - u * 1.4, ax + u * 2.0, ay - u * 1.7);
+      ctx.quadraticCurveTo(ax + u * 1.2, ay - u * .7, ax + u * 2.1, ay - u * .5);
+      ctx.quadraticCurveTo(ax + u * .9, ay + u * .1, ax + u * .3, ay + u * .5);
+      ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+      if (P.ast > .5) {   // flashes de corte diagonal
+        if (t > nextSlash) { slashT = t; nextSlash = t + rand(2.2, 4.5); slashFlip = Math.random() < .5 ? 1 : -1; }
+        const age = t - slashT;
+        if (age < .18) {
+          const p = age / .18, xa = slashFlip > 0 ? -20 : W + 20, xb = slashFlip > 0 ? W + 20 : -20, q = Math.min(1, p * 2.2);
+          ctx.globalAlpha = 1 - p; ctx.strokeStyle = '#fff'; ctx.shadowColor = '#EF4444'; ctx.shadowBlur = 14 * dpr; ctx.lineWidth = 4 * (1 - p) + 1;
+          ctx.beginPath(); ctx.moveTo(xa, H * .08); ctx.lineTo(xa + (xb - xa) * q, H * .08 + H * .84 * q); ctx.stroke(); ctx.shadowBlur = 0;
+        }
+      }
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
   }
 
   const smoke = []; let smokeAcc = 0;
@@ -612,6 +866,7 @@ let isCommunist = false;
       ctx.shadowBlur = 0;
     }
 
+    drawThemeFx(f, g); stepPts(f); drawAnime(f, g);
     ctx.globalAlpha = 1; ctx.shadowBlur = 0;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
@@ -683,7 +938,7 @@ let isCommunist = false;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = (.28 + .72 * lev) * f.alpha * (1 - P.xx * .7);
-    ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 10 * dpr;
+    ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 10 * dpr * THEME.glow;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 1.6;
     ctx.beginPath();
     for (let i = 0; i < WN; i++) {
@@ -716,6 +971,7 @@ let isCommunist = false;
   const camVideo = document.getElementById('camVideo');
   const camCanvas = document.getElementById('camCanvas');
   const flashEl = document.getElementById('flash');
+  let defaultCamera = 'environment';   // 'environment' = traseira, 'user' = frontal
   let camState = '', camWarnUntil = 0;   // HUD: '' | 'ATIVA' | 'FALHOU'
 
   function playShutter() {   // clique de obturador: dois estalos curtos de ruído filtrado
@@ -743,13 +999,13 @@ let isCommunist = false;
     try { if (navigator.vibrate) navigator.vibrate(30); } catch (e) {}
   }
 
-  async function captureRearCameraFrame() {
+  async function captureRearCameraFrame(forceFacing = null) {
     let stream = null;
     camState = 'ATIVA'; renderHud();
     setMode('scanning');
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('sem câmera');
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 } }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: forceFacing || defaultCamera }, width: { ideal: 640 } }, audio: false });
       camVideo.srcObject = stream;
       try { await camVideo.play(); } catch (e) {}
       const t0 = Date.now();
@@ -1146,12 +1402,16 @@ let isCommunist = false;
   function lockMode(m) {   // gamer | focus | dance ficam ativos até serem desativados
     clearHack();
     if (isSleeping) leaveSleep();
+    const wasLocked = lockedMode;
     lockedMode = m;
+    if (ANIME.includes(m) && wasLocked !== m) playAnimeSound(m);
+    if (m === 'focus' && wasLocked !== 'focus') startPomodoro(); else if (m !== 'focus') stopPomodoro();   // Modo Foco: Pomodoro de 25 min
     applyRate(); syncToggles();
     if (!inTalkFlow()) setMode(restMode());
   }
   function unlockNormal() {   // [normal]: destrava e volta os olhos para 'idle'
     lockedMode = null;
+    stopPomodoro();
     clearHack();
     applyRate(); syncToggles();
     if (!isSleeping && !inTalkFlow()) setMode('idle');
@@ -1174,7 +1434,7 @@ let isCommunist = false;
   function enterSleep() {
     clearHack();
     stopAll();
-    lockedMode = null; pendingSleep = false; applyRate();
+    lockedMode = null; stopPomodoro(); pendingSleep = false; applyRate();
     isSleeping = true;
     releaseWake();
     followUntil = 0;
@@ -1201,6 +1461,7 @@ let isCommunist = false;
     acquireWake();                   // só reativa se o Auto estiver ligado
     syncToggles();
     triggerGrumpyWakeUp({ speakNow: true });   // 3 s de mau humor + saudação rabugenta falada
+    { const h = new Date().getHours(); if (h >= 5 && h < 12) scheduleBriefing(); }   // briefing matinal logo depois
   }
 
   // comandos de voz reconhecidos localmente (a IA também pode mandar as tags)
@@ -1210,6 +1471,9 @@ let isCommunist = false;
   const RE_GAMER = /\bvamos\s+chapar\b|\bmodo\s+gamer\b|\bmodo\s+proibido\b/;
   const RE_FOCUS = /\bmodo\s+foco\b|\bhora\s+de\s+estudar\b/;
   const RE_DANCE = /\bdanca\b|\bvamos\s+dancar\b|\bmodo\s+discoteca\b|\bfesta\b/;
+  const RE_BAN = /\bmodo\s+banguela\b|\bfuria\s+da\s+noite\b|\bmodo\s+dragao\b/;
+  const RE_G5 = /\bgear\s*(?:5|cinco)\b|\bmodo\s+luffy\b|\btambores\s+da\s+libertacao\b/;
+  const RE_ASTA = /\bmodo\s+asta\b|\bmodo\s+capeta\b|\bantimagia\b|\bblack\s+asta\b/;
   function detectCmd(raw) {
     const s = String(raw).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     if (RE_NORMAL.test(s)) return 'normal';
@@ -1218,12 +1482,15 @@ let isCommunist = false;
     if (RE_GAMER.test(s)) return 'gamer';
     if (RE_FOCUS.test(s)) return 'focus';
     if (RE_DANCE.test(s)) return 'dance';
+    if (RE_BAN.test(s)) return 'banguela';
+    if (RE_G5.test(s)) return 'gear5';
+    if (RE_ASTA.test(s)) return 'asta';
     return null;
   }
 
   function runAct(act, speaking) {
     if (act === 'normal') unlockNormal();
-    else if (act === 'gamer' || act === 'focus' || act === 'dance') lockMode(act);
+    else if (act === 'gamer' || act === 'focus' || act === 'dance' || ANIME.includes(act)) lockMode(act);
     else if (act === 'hack') startHack();
     else if (act === 'sleep') { if (speaking) pendingSleep = true; else enterSleep(); }
     else if (act === 'wakeup') { if (isSleeping) wakeUp(); }
@@ -1234,6 +1501,41 @@ let isCommunist = false;
     if (m === 'hack') { if (hackOn()) endHack(); else startHack(); return; }
     if (lockedMode === m && !isSleeping) unlockNormal(); else lockMode(m);
   }
+
+  /* ---------- Armaduras: troca por botão, voz e tag [theme: ...] ---------- */
+  let themeLocal = false;
+  function applyTheme(id) {
+    if (!THEMES.includes(id)) return;
+    setThemeVisual(id);
+    try { localStorage.setItem(THEME_KEY, id); } catch (e) {}
+    trail.length = 0;
+    if (ANIME.includes(lockedMode)) unlockNormal();   // trocar de armadura destrava o modo de anime
+    else setMode(mode);
+    syncToggles();
+  }
+  function handleThemeTag(v) {
+    v = normTxt(v);
+    const i = THEMES.indexOf(themeId); let id = null;
+    if (v === 'next') id = THEMES[(i + 1) % 4];
+    else if (v === 'prev') id = THEMES[(i + 3) % 4];
+    else if (THEMES.includes(v)) id = v;
+    else if (/^[1-4]$/.test(v)) id = THEMES[v - 1];
+    if (id) applyTheme(id);
+  }
+  function detectTheme(raw) {   // comandos locais (evita depender só da IA)
+    const t = normTxt(raw);
+    if (/\b(?:tema|armadura)\s+anterior\b|\bvolt\w*\s+(?:a\s+|o\s+)?(?:armadura|tema)\b/.test(t)) return 'prev';
+    if (/\bproxim[ao]\s+(?:tema|armadura)\b|\bmud\w*\s+(?:de\s+)?(?:tema|armadura)\b|\btroc\w*\s+(?:de\s+)?(?:tema|armadura)\b/.test(t)) return 'next';
+    if (/\barmadura\s+(?:numero\s+)?(?:1|um)\b|\b(?:tema|armadura)\s+padrao\b/.test(t)) return 'punk';
+    if (/\barmadura\s+(?:numero\s+)?(?:2|dois)\b|\bmodo\s+stark\b|\bhomem\s+de\s+ferro\b/.test(t)) return 'stark';
+    if (/\barmadura\s+(?:numero\s+)?(?:3|tres)\b|\bedge\s*runner\b/.test(t)) return 'edgerunner';
+    if (/\barmadura\s+(?:numero\s+)?(?:4|quatro)\b|\bstealth\b/.test(t)) return 'stealth';
+    return null;
+  }
+  document.getElementById('themeBtn').addEventListener('click', e => {
+    e.stopPropagation(); onFirstTap(); handleThemeTag('next');
+    notify('Armadura ' + (THEMES.indexOf(themeId) + 1) + ': ' + THEME.n, 1800);
+  });
 
   function setCommunist(v) {   // liga/desliga a camada comunista (não mexe em lockedMode nem nas expressões)
     v = !!v;
@@ -1250,7 +1552,7 @@ let isCommunist = false;
     return null;
   }
 
-  [['gamer', 'Chapa'], ['focus', 'Foco'], ['dance', 'Discoteca'], ['hack', 'Hacker'], ['sleep', 'Dormir']].forEach(([m, label]) => {
+  [['gamer', 'Chapa'], ['focus', 'Foco'], ['dance', 'Discoteca'], ['hack', 'Hacker'], ['sleep', 'Dormir'], ['banguela', 'Banguela'], ['gear5', 'Gear 5'], ['asta', 'Asta']].forEach(([m, label]) => {
     const b = document.createElement('button');
     b.textContent = label;
     b.addEventListener('click', e => { e.stopPropagation(); onFirstTap(); toggleMode(m); });
@@ -1263,6 +1565,12 @@ let isCommunist = false;
     cb.addEventListener('click', e => { e.stopPropagation(); onFirstTap(); setCommunist(!isCommunist); notify(isCommunist ? 'Modo comunista ativado, camarada!' : 'Modo comunista desativado.', 2200); });
     bar.appendChild(cb);
     tbtn.comunista = cb;
+  }
+  {
+    const ct = document.createElement('button');
+    ct.textContent = 'Contatos';
+    ct.addEventListener('click', e => { e.stopPropagation(); importContacts(); });
+    bar.appendChild(ct);
   }
   syncToggles();
 
@@ -1292,7 +1600,9 @@ let isCommunist = false;
   const GROQ_URL = 'https://jarvis-api.emanuelpedro086.workers.dev/chat';
   const GROQ_MODEL = 'llama-3.3-70b-versatile';
   const SEARCH_URL = 'https://jarvis-api.emanuelpedro086.workers.dev/search';
-  const VISION_RE = /\b(olha isso|olha aqui|o que e isso|o que voce ve|enxerga\w*|analisa isso|le isso|mostra)\b/;
+  const FRONT_RE = /\b(olha pra mim|olha para mim|camera frontal|me olha|selfie|olha minha cara)\b/;
+  const BACK_RE = /\bcamera traseira\b/;
+  const VISION_RE = /\b(olha isso|olha aqui|o que e isso|o que voce ve|enxerga\w*|analisa isso|le isso|le (?:esse|essa|este|esta)|olha (?:esse|essa|este|esta)|mostra)\b/;
   const history = [];   // últimas 8 mensagens (user e assistant)
   let ctl = null;
 
@@ -1323,6 +1633,183 @@ let isCommunist = false;
     if (/\bmais\s+sarcasmo|\b(?:aumenta|sobe)\w*\s+(?:o\s+)?sarcasmo|\bsarcasmo\s+(?:maximo|total)/.test(t)) { const hi = ladder.filter(v => v > sarcasmLevel); return hi.length ? hi[0] : 100; }
     return null;
   }
+  /* ---------- Câmera padrão, contatos/WhatsApp, tarefas, Pomodoro e briefing matinal ---------- */
+  const CAM_KEY = 'jarvis_camera', CONTACTS_KEY = 'jarvis_contacts', TASK_KEY = 'jarvis_tasks', POMO_KEY = 'jarvis_pomo';
+  try { if (localStorage.getItem(CAM_KEY) === 'user') defaultCamera = 'user'; } catch (e) {}
+  let taskCount = 0, pomoCount = 0;
+
+  document.getElementById('camBtn').addEventListener('click', e => {   // toque em "CAM:" alterna traseira/frontal
+    e.stopPropagation();
+    defaultCamera = defaultCamera === 'user' ? 'environment' : 'user';
+    try { localStorage.setItem(CAM_KEY, defaultCamera); } catch (err) {}
+    renderHud();
+    notify('Câmera padrão: ' + (defaultCamera === 'user' ? 'frontal' : 'traseira'), 1800);
+  });
+
+  /* contatos: jarvis_contacts = { "nome": "5561999999999" } */
+  function loadContacts() {
+    try { const o = JSON.parse(localStorage.getItem(CONTACTS_KEY) || '{}'); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; } catch (e) { return {}; }
+  }
+  function normPhone(raw) {
+    let d = String(raw).replace(/\D/g, '').replace(/^0+/, '');
+    if (d.length === 10 || d.length === 11) d = '55' + d;
+    return d.length >= 10 ? d : '';
+  }
+  function saveContact(name, tel, quiet) {
+    name = String(name || '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 40);
+    const num = normPhone(tel);
+    if (!name || !num) return false;
+    const c = loadContacts();
+    if (!(name in c) && Object.keys(c).length >= 400) return false;
+    c[name] = num;
+    try { localStorage.setItem(CONTACTS_KEY, JSON.stringify(c)); } catch (e) { return false; }
+    if (!quiet) notify('Contato salvo: ' + name, 2500);
+    return true;
+  }
+  function findContact(name) {
+    const c = loadContacts(), n = normTxt(name), ks = Object.keys(c);
+    if (!n) return null;
+    const k = ks.find(x => normTxt(x) === n)
+      || (n.indexOf(' ') < 0 ? ks.find(x => normTxt(x).split(' ')[0] === n) : null)
+      || ks.find(x => { const y = normTxt(x); return y && (y.includes(n) || n.includes(y)); });
+    return k ? c[k] : null;
+  }
+  async function importContacts() {   // Contact Picker do Chrome Android; fallback manual com prompt()
+    try {
+      if (navigator.contacts && navigator.contacts.select) {
+        const list = await navigator.contacts.select(['name', 'tel'], { multiple: true });
+        let n = 0;
+        for (const ct of (list || [])) if (saveContact((ct.name && ct.name[0]) || '', (ct.tel && ct.tel[0]) || '', true)) n++;
+        notify(n ? n + ' contato(s) importado(s).' : 'Nenhum contato com nome e telefone selecionado.', 3000);
+        return;
+      }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    const nm = window.prompt('Nome do contato:');
+    if (!nm) return;
+    const tel = window.prompt('Número com DDD (ex: 61999999999):');
+    if (!tel) return;
+    notify(saveContact(nm, tel, true) ? 'Contato salvo: ' + nm.trim().toLowerCase() : 'Número inválido.', 2500);
+  }
+
+  /* ações: WhatsApp, YouTube e Maps (se o navegador bloquear a abertura, aparece um botão para tocar) */
+  const actBtn = document.getElementById('actBtn');
+  let actTimer = 0;
+  function showActChip(url, label) {
+    actBtn.textContent = label + ' ›'; actBtn.dataset.url = url; actBtn.classList.add('on');
+    clearTimeout(actTimer); actTimer = setTimeout(() => actBtn.classList.remove('on'), 25000);
+  }
+  actBtn.addEventListener('click', e => { e.stopPropagation(); const u = actBtn.dataset.url; actBtn.classList.remove('on'); if (u) window.open(u, '_blank'); });
+  function openLink(url, label) {
+    let w = null;
+    try { w = window.open(url, '_blank'); } catch (e) {}
+    if (!w) showActChip(url, label);
+  }
+  function runAction(arg) {   // [action: tipo | alvo | texto]
+    const q = String(arg).split('|').map(x => x.trim());
+    const kind = normTxt(q[0] || '');
+    if (kind === 'whatsapp') {
+      const who = q[1] || '', msg = q.slice(2).join(' | ');
+      const num = (/^[\d\s()+\-.]+$/.test(who) && who.replace(/\D/g, '').length >= 8) ? normPhone(who) : findContact(who);
+      openLink('https://wa.me/' + (num ? num : '') + '?text=' + encodeURIComponent(msg), num ? 'Abrir WhatsApp' : 'Abrir WhatsApp (escolher contato)');
+    } else if (kind === 'youtube' && q[1]) {
+      openLink('https://www.youtube.com/results?search_query=' + encodeURIComponent(q.slice(1).join(' ')), 'Abrir YouTube');
+    } else if (kind === 'maps' && q[1]) {
+      openLink('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q.slice(1).join(' ')), 'Abrir Maps');
+    }
+  }
+
+  /* tarefas: jarvis_tasks = ["comprar pão", ...] */
+  function loadTasks() {
+    try { const a = JSON.parse(localStorage.getItem(TASK_KEY) || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string' && x.trim()).slice(-30) : []; } catch (e) { return []; }
+  }
+  function saveTasks(a) {
+    a = a.slice(-30);
+    try { localStorage.setItem(TASK_KEY, JSON.stringify(a)); } catch (e) {}
+    taskCount = a.length; renderHud();
+  }
+  function addTask(d) {
+    d = String(d).replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (d.length < 2) return;
+    const a = loadTasks();
+    if (a.some(x => normTxt(x) === normTxt(d))) return;
+    a.push(d); saveTasks(a);
+  }
+  function doneTask(k) {
+    const n = normTxt(k);
+    if (!n) return false;
+    const a = loadTasks(), i = a.findIndex(x => { const y = normTxt(x); return y.includes(n) || n.includes(y); });
+    if (i < 0) return false;
+    a.splice(i, 1); saveTasks(a);
+    return true;
+  }
+  taskCount = loadTasks().length;
+
+  const tasksModal = document.getElementById('tasksModal'), tasksList = document.getElementById('tasksList');
+  function renderTasksModal() {
+    const a = loadTasks();
+    tasksList.textContent = '';
+    if (!a.length) { const li = document.createElement('li'); li.textContent = 'Nenhuma tarefa pendente.'; tasksList.appendChild(li); return; }
+    a.forEach((t, i) => {
+      const li = document.createElement('li'), sp = document.createElement('span'), b = document.createElement('button');
+      sp.textContent = t; b.textContent = 'feito';
+      b.addEventListener('click', ev => { ev.stopPropagation(); const cur = loadTasks(); cur.splice(i, 1); saveTasks(cur); renderTasksModal(); });
+      li.appendChild(sp); li.appendChild(b); tasksList.appendChild(li);
+    });
+  }
+  document.getElementById('tasksBtn').addEventListener('click', e => { e.stopPropagation(); renderTasksModal(); tasksModal.classList.add('open'); });
+  document.getElementById('tasksClose').addEventListener('click', e => { e.stopPropagation(); tasksModal.classList.remove('open'); });
+  tasksModal.addEventListener('click', e => { if (e.target === tasksModal) tasksModal.classList.remove('open'); });
+
+  /* Pomodoro: começa sozinho ao ativar o Modo Foco; ciclos concluídos no dia ficam salvos */
+  function loadPomo() {
+    try { const o = JSON.parse(localStorage.getItem(POMO_KEY) || '{}'); if (o && o.d === new Date().toDateString() && isFinite(o.n)) return o.n | 0; } catch (e) {}
+    return 0;
+  }
+  function savePomo(n) {
+    pomoCount = n;
+    try { localStorage.setItem(POMO_KEY, JSON.stringify({ d: new Date().toDateString(), n })); } catch (e) {}
+    renderHud();
+  }
+  pomoCount = loadPomo();
+  function stopPomodoro() { for (let i = timers.length - 1; i >= 0; i--) if (timers[i].kind === 'pomo') timers.splice(i, 1); renderHud(); }
+  function startPomodoro() { stopPomodoro(); addTimer(1500, 'pomo'); notify('Pomodoro iniciado: 25 minutos de foco.', 3000); }
+  function pomoDone() {
+    savePomo(pomoCount + 1);
+    const txt = 'Pomodoro concluído! Faça uma pausa de cinco minutos.';
+    notify('Pomodoro ' + pomoCount + ' concluído! Pausa de 5 minutos.', 6000);
+    trySpeak({ face: 'happy', text: txt });
+  }
+
+  /* briefing matinal: depois de acordar (05h-12h) e dos 3 s de mau humor, clima + tarefas */
+  function briefingText(wx) {
+    const tasks = loadTasks(), sar = sarcasmLevel > 30, part = [];
+    if (wx) {
+      let t = 'Em ' + wx.loc + ' faz ' + Math.round(wx.temp) + ' graus';
+      if (wx.rain !== null) t += ' e ' + Math.round(wx.rain) + ' por cento de chance de chuva';
+      part.push(t + '.' + (wx.rain !== null && wx.rain >= 50 ? ' Leve um guarda-chuva.' : ''));
+    }
+    if (!tasks.length) part.push(sar ? 'Nenhuma tarefa pendente. Milagre.' : 'Nenhuma tarefa pendente.');
+    else if (tasks.length === 1) part.push('Você tem uma tarefa pendente: ' + tasks[0] + '.');
+    else part.push('Você tem ' + tasks.length + ' tarefas pendentes: ' + tasks.slice(0, 3).join(', ') + (tasks.length > 3 ? ' e mais ' + (tasks.length - 3) : '') + '.');
+    const out = (isCommunist ? 'Camarada, ' : '') + (sar ? 'já que não tem jeito, o briefing da manhã. ' : 'o briefing da manhã. ') + part.join(' ');
+    return out.charAt(0).toUpperCase() + out.slice(1);
+  }
+  function scheduleBriefing() {
+    const sid = session, t0 = Date.now();
+    const wxP = fetchWeather('Luziânia').catch(() => null);
+    const tick = () => {
+      if (sid !== session) return;                                        // o usuário interagiu: cancela
+      if (Date.now() - t0 < 3000 || phase === 'speaking') { setTimeout(tick, 400); return; }
+      wxP.then(wx => {
+        if (sid !== session || isSleeping) return;
+        if (phase !== 'idle' && phase !== 'hold') { setTimeout(tick, 400); return; }
+        clearTimeout(holdTimer);
+        speak({ face: 'smirk', text: briefingText(wx) });
+      });
+    };
+    setTimeout(tick, 3000);
+  }
+
   const sarcBtn = document.getElementById('sarcBtn');
   sarcBtn.addEventListener('click', e => {   // toque no "SARC" do HUD: 20 -> 50 -> 80 -> 100 -> 20
     e.stopPropagation();
@@ -1352,20 +1839,22 @@ let isCommunist = false;
 
   function renderHud() {
     const sys = !navigator.onLine ? '<span class="bad">OFFLINE</span>' : (lastOk ? 'ONLINE' : '<span class="warn">DEGRADED</span>');
-    hudL.innerHTML = 'SYS: ' + sys + '\nMEM: ' + memCount + (camState === 'ATIVA' ? '\n<span class="warn">CAM: ATIVA</span>' : (Date.now() < camWarnUntil ? '\n<span class="warn">CAM: INDISPONÍVEL</span>' : ''));
+    const camLine = camState === 'ATIVA' ? '<span class="warn">CAM: ATIVA</span>' : (Date.now() < camWarnUntil ? '<span class="warn">CAM: INDISPONÍVEL</span>' : 'CAM: ' + (defaultCamera === 'user' ? 'FRONT' : 'TRAS'));
+    hudL.innerHTML = 'SYS: ' + sys + '\nMEM: ' + memCount + '\n' + camLine + '\nTASKS: ' + taskCount;
     const now = Date.now();
     let r = 'PING: ' + (pingMs === null ? '--' : pingMs + 'ms');
     r += '\nSARC: ' + sarcasmLevel + '%';
     if (batInfo) r += '\n<span class="' + (batLow ? 'warn' : (batInfo.chg ? 'tm' : '')) + '">BAT: ' + batInfo.pct + '%' + (batInfo.chg ? ' +' : '') + '</span>';
-    timers.forEach(t => { r += '\n<span class="tm">TIMER ' + fmtT((t.end - now) / 1000) + '</span>'; });
+    if (pomoCount > 0 || lockedMode === 'focus') r += '\n<span class="tm">POMO: ' + pomoCount + '</span>';
+    timers.forEach(t => { r += '\n<span class="tm">' + (t.kind === 'pomo' ? 'FOCO ' : 'TIMER ') + fmtT((t.end - now) / 1000) + '</span>'; });
     hudR.innerHTML = r;
   }
 
-  function addTimer(sec) {
+  function addTimer(sec, kind) {
     sec = Math.round(sec);
     if (!(sec >= 1)) return;
-    if (timers.length >= 4) timers.shift();
-    timers.push({ end: Date.now() + Math.min(sec, 86400) * 1000 });
+    if (timers.length >= 4) { const i = timers.findIndex(t => t.kind !== 'pomo'); timers.splice(i < 0 ? 0 : i, 1); }
+    timers.push({ end: Date.now() + Math.min(sec, 86400) * 1000, kind: kind || '' });
     renderHud();
   }
 
@@ -1378,9 +1867,10 @@ let isCommunist = false;
 
   setInterval(() => {
     const now = Date.now();
-    let done = false;
-    for (let i = timers.length - 1; i >= 0; i--) if (timers[i].end <= now) { timers.splice(i, 1); done = true; }
+    let done = false, pomo = false;
+    for (let i = timers.length - 1; i >= 0; i--) if (timers[i].end <= now) { if (timers[i].kind === 'pomo') pomo = true; timers.splice(i, 1); done = true; }
     if (done) timerDone();
+    if (pomo) pomoDone();
     renderHud();
   }, 250);
   window.addEventListener('online', renderHud);
@@ -1389,7 +1879,7 @@ let isCommunist = false;
   const WEATHER_URL = 'https://jarvis-api.emanuelpedro086.workers.dev/weather';
   const EMO = 'idle|thinking|smirk|wink|angry|surprised|evil|crying|glitch|happy|bored';
   const EMO_LIST = EMO.split('|');
-  const MODE_LIST = ['gamer', 'focus', 'dance', 'hack', 'sleep', 'wakeup', 'normal'];
+  const MODE_LIST = ['gamer', 'focus', 'dance', 'hack', 'sleep', 'wakeup', 'normal', 'banguela', 'gear5', 'asta'];
 
   /* ---------- Memória permanente (localStorage) ---------- */
   const MEM_KEY = 'jarvis_memories', MEM_MAX = 15;
@@ -1426,7 +1916,12 @@ let isCommunist = false;
       .replace(/\[timer:\s*([^\]]*)\]/gi, (_, v) => { const n = parseFloat(String(v).replace(',', '.')); if (isFinite(n)) addTimer(n); return ' '; })
       .replace(/\[sarcasm:\s*([^\]]*)\]/gi, (_, v) => { if (!sarcLocal) { const n = parseFloat(String(v).replace(',', '.')); if (isFinite(n)) setSarcasm(n); } return ' '; })
       .replace(/\[(sair_comunista|comunista)\]/gi, (_, k) => { setCommunist(k.toLowerCase() === 'comunista'); return ' '; })
-      .replace(/\[(?:save|timer|sarcasm|sair_comunista|comunista):?[^\]]*$/i, '')
+      .replace(/\[theme:\s*([^\]]*)\]/gi, (_, v) => { if (!themeLocal) handleThemeTag(v); return ' '; })
+      .replace(/\[contact_save:\s*([^\]]*)\]/gi, (_, v) => { const q = String(v).split('|'); if (q.length >= 2) saveContact(q[0], q.slice(1).join(''), false); return ' '; })
+      .replace(/\[action:\s*([^\]]*)\]/gi, (_, v) => { runAction(v); return ' '; })
+      .replace(/\[task_add:\s*([^\]]*)\]/gi, (_, v) => { addTask(v); return ' '; })
+      .replace(/\[task_done:\s*([^\]]*)\]/gi, (_, v) => { doneTask(v); return ' '; })
+      .replace(/\[(?:save|timer|sarcasm|sair_comunista|comunista|contact_save|action|task_add|task_done|theme):?[^\]]*$/i, '')
       .trim();
   }
 
@@ -1480,13 +1975,19 @@ let isCommunist = false;
       '[hack] para o modo hacker, que dura só 7 segundos ("modo hacker", "hackear"), ' +
       '[sleep] para dormir ("vai dormir", "dormir"), ' +
       '[wakeup] para acordar ("acorda", "bom dia") e ' +
+      '[banguela] para o modo Fúria da Noite ("modo banguela", "fúria da noite", "modo dragão"), [gear5] para o modo Gear 5 ("gear 5", "modo luffy", "tambores da libertação"), [asta] para o modo Black Asta ("modo asta", "modo capeta", "antimagia", "black asta") e ' +
       '[normal] para desativar o modo fixo atual e voltar ao normal ("voltar ao normal", "desativar modo", "sair do modo", "para de dançar"). ' +
-      '[gamer], [focus] e [dance] ficam ativos até o usuário desativar; [hack] volta sozinho ao modo anterior. ' +
+      '[gamer], [focus], [dance], [banguela], [gear5] e [asta] ficam ativos até o usuário desativar; [hack] volta sozinho ao modo anterior. ' +
       'Nunca use tag de modo por conta própria, nunca repita a tag de um modo que já está ativo e nunca mencione as tags. ' +
       'Modo fixo atual do robô: ' + (lockedMode || 'normal') + '. ' +
       (lockedMode === 'gamer' ? 'Você está no modo gamer/chapa: sua personalidade agora é super calma, tranquila, relaxada e bem-humorada, falando de forma leve e sem agressividade. ' : '') +
-      (lockedMode === 'focus' ? 'Você está no modo foco/estudos: seja mais direto, objetivo e produtivo para ajudar o usuário a estudar, sem piadas longas. ' : '') +
+      (lockedMode === 'focus' ? 'Você está no modo foco/estudos: seja mais direto, objetivo e produtivo para ajudar o usuário a estudar, sem piadas longas. ' +
+        'TUTOR DE ESTUDOS: se o usuário mostrar um exercício, texto ou código pela câmera, explique passo a passo de forma didática e faça perguntas para testar se ele entendeu, em vez de apenas dar a resposta pronta. Ao ensinar, você pode usar até 4 frases curtas (a regra de 2 frases não vale para explicações). ' : '') +
       (lockedMode === 'dance' ? 'Você está no modo discoteca: seja animado, festeiro e empolgado. ' : '') +
+      (lockedMode === 'banguela' ? 'Modo Fúria da Noite (Banguela) ATIVO: aja como um dragão leal, curioso, brincalhão e super protetor com o usuário. ' : '') +
+      (lockedMode === 'gear5' ? 'Modo Gear 5 (Luffy) ATIVO: energia caótica, alegre e livre ao máximo! Ria com "Shishishi!" e trate tudo com entusiasmo cartoon. ' : '') +
+      (lockedMode === 'asta' ? 'Modo Black Asta (Antimagia) ATIVO: determinação inabalável e intensa! Fale com garra, energia máxima, diga que nunca vai desistir e que vai cortar qualquer obstáculo com Antimagia. ' : '') +
+      'Armadura (tema visual) atual: ' + (THEMES.indexOf(themeId) + 1) + ' (' + themeId + '). Para trocar, inclua UMA tag de tema logo depois da tag de emoção: se o usuário pedir "próximo tema", "próxima armadura" ou "muda de tema", use [theme: next]; se pedir "tema anterior", "volta a armadura" ou "armadura anterior", use [theme: prev]; se pedir pelo nome ou número ("armadura 1" ou "padrão" = [theme: punk]; "armadura 2", "modo stark" ou "homem de ferro" = [theme: stark]; "armadura 3" ou "edgerunner" = [theme: edgerunner]; "armadura 4" ou "stealth" = [theme: stealth]), use a tag exata. Confirme em poucas palavras e nunca mencione a tag. ' +
       'Não use emojis, markdown, listas nem asteriscos. ' +
       'Data e hora exatas do dispositivo do usuário agora: ' + agora + '. Use quando perguntarem sobre data, hora ou dia da semana. ' +
       'Memórias permanentes sobre o usuário: ' + (mem.length ? mem.join('; ') : 'nenhuma ainda') + '. Use-as com naturalidade, sem recitar a lista. ' +
@@ -1495,12 +1996,16 @@ let isCommunist = false;
       'O fato deve ser curto, em português, e não repetir o que já está nas memórias. Não salve trivialidades e nunca mencione a tag. ' +
       'Se o usuário pedir para marcar um tempo, cronômetro, timer ou alarme (ex: "me avisa em 2 minutos"), confirme em poucas palavras e inclua no final da resposta a tag invisível [timer: segundos] com o total em segundos (ex: [timer: 120]). ' +
       'Converta minutos e horas para segundos e, se for um horário do relógio, calcule os segundos restantes a partir da hora atual. Se ele não disser quanto tempo, pergunte em vez de chutar. Nunca mencione a tag. ' +
+      'Contatos salvos (só os nomes): ' + (Object.keys(loadContacts()).slice(0, 80).join(', ') || 'nenhum') + '. ' +
+      'Para salvar um contato por voz (ex: "salva o zap do João 61 98888-7777"), inclua [contact_save: Nome | 55DDDNumero] (só dígitos, com 55 e DDD). ' +
+      'Para mandar mensagem no WhatsApp, inclua [action: whatsapp | NomeOuNumero | mensagem] com o texto a enviar; para abrir o YouTube use [action: youtube | termo] e para o mapa use [action: maps | lugar]. Confirme em poucas palavras e nunca mencione as tags nem os números. ' +
+      'Tarefas pendentes do usuário: ' + (loadTasks().slice(-15).join('; ') || 'nenhuma') + '. Quando ele pedir para anotar ou lembrar de algo, inclua [task_add: descrição curta]; quando disser que concluiu uma tarefa, inclua [task_done: palavra-chave]. Nunca mencione as tags. ' +
       (noWeather
         ? 'Os dados reais do clima virão na mensagem do usuário; NUNCA use a tag [weather] nesta resposta. '
         : 'Se o usuário perguntar sobre clima, temperatura, chuva ou previsão do tempo, responda APENAS com a tag [weather: Nome da Cidade] (por exemplo [weather: São Paulo] ou [weather: Tóquio]), sem mais nada e sem tag de emoção, pois o app buscará os dados reais. Se o usuário não especificar nenhuma cidade, use [weather: Luziânia]. ') +
       (noTools
         ? 'Se uma imagem da câmera ou resultados de pesquisa vierem na mensagem do usuário, use-os para responder; NUNCA use as tags [vision] nem [search] nesta resposta. '
-        : 'Você tem uma câmera traseira: se o usuário pedir para olhar, ver, ler ou analisar algo à frente dele e nenhuma imagem foi enviada, responda APENAS com a tag [vision], sem mais nada. ' +
+        : 'Você tem câmera traseira e frontal: se o usuário pedir para olhar, ver, ler ou analisar algo à frente dele e nenhuma imagem foi enviada, responda APENAS com a tag [vision], sem mais nada. ' +
           'Quando uma imagem vier anexada, descreva ou analise o que vê em até 2 frases curtas, com humor. ' +
           'Se o usuário perguntar sobre notícias recentes, fatos atuais, significados, pessoas, eventos ou qualquer informação que precise de busca na internet, responda APENAS com a tag [search: termo de pesquisa curto], sem mais nada e sem tag de emoção. ');
   }
@@ -1519,10 +2024,10 @@ let isCommunist = false;
   }
 
   function parseReply(raw) {
-    const tags = (raw.match(/\[[A-Za-z]+\]/g) || []).map(x => x.slice(1, -1).toLowerCase());
+    const tags = (raw.match(/\[[A-Za-z0-9]+\]/g) || []).map(x => x.slice(1, -1).toLowerCase());
     const face = tags.find(x => EMO_LIST.includes(x)) || 'idle';
     const act = tags.find(x => MODE_LIST.includes(x)) || null;   // tag de modo (removida do texto abaixo)
-    const clean = raw.replace(/\[(?:weather|search|vision)[^\]]*\]?/gi, '').replace(/\[[A-Za-zÀ-ÿ_]+\]/g, '').replace(/[*_#`]/g, '').replace(/\s+/g, ' ').trim();
+    const clean = raw.replace(/\[(?:weather|search|vision)[^\]]*\]?/gi, '').replace(/\[[A-Za-zÀ-ÿ0-9_]+\]/g, '').replace(/[*_#`]/g, '').replace(/\s+/g, ' ').trim();
     return { face, text: clean, act };
   }
 
@@ -1535,7 +2040,8 @@ let isCommunist = false;
     let loc = d.location;
     if (loc && typeof loc === 'object') loc = loc.name || loc.city || '';
     loc = (typeof loc === 'string' && loc.trim()) ? loc.trim() : city;
-    return { loc, temp: cur.temperature_2m, rain: typeof cur.precipitation_probability === 'number' ? cur.precipitation_probability : null };
+    lastWeatherData = { loc, temp: cur.temperature_2m, rain: typeof cur.precipitation_probability === 'number' ? cur.precipitation_probability : null, code: typeof cur.weather_code === 'number' ? cur.weather_code : null, precip: typeof cur.precipitation === 'number' ? cur.precipitation : 0 };
+    return lastWeatherData;
   }
 
   async function fetchSearch(term, signal) {
@@ -1566,11 +2072,16 @@ let isCommunist = false;
       sarcLocal = false;
       const ls = detectSarcasm(text);
       if (ls !== null) { setSarcasm(ls); sarcLocal = true; }   // vale já neste prompt
+      themeLocal = false;
+      const th = detectTheme(text);
+      if (th) { themeLocal = true; handleThemeTag(th); }   // vale já neste prompt; a tag da IA é ignorada
       const cm = detectCommunist(text);
       if (cm) setCommunist(cm === 'on');                         // modo comunista por voz (vale já neste prompt)
       let image = null, usedImage = false;
-      if (VISION_RE.test(normTxt(text))) {   // gatilho por palavra-chave: captura ANTES de chamar /chat
-        image = await captureRearCameraFrame();
+      const nt = normTxt(text);
+      const facing = FRONT_RE.test(nt) ? 'user' : (BACK_RE.test(nt) ? 'environment' : null);   // 'olha pra mim', 'selfie'... força a frontal
+      if (facing || VISION_RE.test(nt)) {   // gatilho por palavra-chave: captura ANTES de chamar /chat
+        image = await captureRearCameraFrame(facing);
         if (c.signal.aborted) throw new Error('abort');
         if (!image) { const r0 = { face: 'crying', text: 'Não consegui abrir a câmera. Libere a permissão do site no Chrome e tente de novo.' }; return r0; }
         usedImage = true;
@@ -1581,7 +2092,7 @@ let isCommunist = false;
       let reply = parseReply(raw);
 
       if (!image && /\[vision\]/i.test(raw)) {   // tag da IA: captura o frame e reenvia a pergunta com a imagem
-        image = await captureRearCameraFrame();
+        image = await captureRearCameraFrame(facing);
         if (c.signal.aborted) throw new Error('abort');
         if (!image) return { face: 'crying', text: 'Não consegui abrir a câmera. Libere a permissão do site no Chrome e tente de novo.' };
         usedImage = true;
@@ -1686,7 +2197,7 @@ let isCommunist = false;
   }
 
   document.addEventListener('pointerdown', e => {
-    if (e.target.closest('#bar, #memBtn, #sarcBtn')) return;
+    if (e.target.closest('#bar, #memBtn, #sarcBtn, #camBtn, #tasksBtn, #actBtn, #tasksModal, #themeBtn')) return;
     onFirstTap();
     if (tapGreeted) { tapGreeted = false; return; }   // este toque só disparou a saudação
     if (isSleeping) { wakeUp(); return; }   // toque na tela acorda
@@ -1778,6 +2289,8 @@ let isCommunist = false;
     }).catch(() => {});
   } catch (e) {}
 
+  fetchWeather('Luziânia').catch(() => {});   // clima local silencioso para o fundo do visor
+  setInterval(() => { if (!document.hidden) fetchWeather('Luziânia').catch(() => {}); }, 1800000);
   triggerGrumpyWakeUp();   // abriu/recarregou a página: 3 s de mau humor (a fala sai no primeiro toque)
 
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
