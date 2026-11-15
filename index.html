@@ -1,0 +1,1695 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Jarvis</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:manipulation;overscroll-behavior:none;font-family:system-ui,-apple-system,Roboto,sans-serif;color:#fff}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;background:#000}
+  #notice{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);left:50%;transform:translateX(-50%);max-width:90%;padding:8px 14px;border-radius:999px;background:rgba(168,85,247,.14);border:1px solid rgba(168,85,247,.35);font-size:13px;line-height:1.35;color:#d8b4fe;text-align:center;opacity:0;transition:opacity .4s;pointer-events:none}
+  #notice.show{opacity:1}
+  #caption{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 110px);padding:0 24px;min-height:18px;text-align:center;font-size:14px;color:rgba(216,180,254,.5);pointer-events:none}
+  #bar{position:fixed;left:0;right:0;bottom:0;display:flex;flex-wrap:nowrap;overflow-x:auto;justify-content:safe center;gap:8px;scrollbar-width:none;padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 12px)}
+  #bar::-webkit-scrollbar{display:none}
+  #bar button{flex:none;white-space:nowrap;font:inherit;font-size:12px;padding:8px 12px;border-radius:999px;border:1px solid rgba(224,36,168,.3);background:rgba(255,255,255,.05);color:rgba(255,160,230,.65);cursor:pointer}
+  #bar button.on{background:rgba(224,36,168,.3);color:#fff}
+  #memBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 46px);left:8px;font:inherit;font-size:10px;padding:5px 9px;border-radius:999px;border:1px solid rgba(224,36,168,.22);background:transparent;color:rgba(255,160,230,.4);opacity:.55;cursor:pointer}
+  #memBtn:active{opacity:1}
+  #crt{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 52%,rgba(0,0,0,.72) 100%),repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.22) 2px 3px)}
+  .hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);font:10px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.08em;color:rgba(0,240,255,.62);text-shadow:0 0 6px rgba(0,240,255,.45);pointer-events:none;white-space:pre}
+  #hudL{left:12px}
+  #hudR{right:12px;text-align:right}
+  .hud .warn{color:rgba(250,204,21,.9)}
+  .hud .bad{color:rgba(255,30,86,.95)}
+  .hud .tm{color:rgba(57,255,20,.9)}
+  @keyframes hudflash{50%{opacity:.1}}
+  .hud.flash{animation:hudflash .3s 6}
+  #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:50;transition:opacity .5s ease-out}
+  #flash.snap{opacity:.92;transition:none}
+  #sarcBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 24px);right:6px;width:104px;height:18px;padding:0;border:0;background:transparent;opacity:0;cursor:pointer;z-index:5}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="crt"></div>
+<div class="hud" id="hudL"></div>
+<div class="hud" id="hudR"></div>
+<div id="notice"></div>
+<div id="flash"></div>
+<video id="camVideo" autoplay playsinline muted style="display:none"></video>
+<canvas id="camCanvas" style="display:none"></canvas>
+<button id="memBtn" type="button" title="Apagar as memórias permanentes do Jarvis">limpar memória</button>
+<button id="sarcBtn" type="button" aria-label="Nível de sarcasmo"></button>
+<div id="caption">Toque na tela para falar</div>
+<div id="bar"></div>
+
+<script>
+/* Modo fixo atual: null = normal | 'gamer' | 'focus' | 'dance'. Só volta ao normal com [normal] ou pedido do usuário. */
+let lockedMode = null;
+
+(() => {
+  'use strict';
+
+  const player = new Audio();   // instância única, destravada no primeiro toque (Chrome Android)
+  player.crossOrigin = 'anonymous';
+
+  /* ---------- Web Audio: analisador da voz + bipes cyber ---------- */
+  let actx = null, analyser = null, abuf = null, live = false, lvl = 0;
+  const WN = 72, wv = new Float32Array(WN);   // pontos da onda sonora do HUD
+
+  function initAudio() {
+    if (actx) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      actx = new AC();
+      if (actx.state === 'suspended') actx.resume().catch(() => {});
+      try {
+        const an = actx.createAnalyser();
+        an.fftSize = 512;
+        an.smoothingTimeConstant = .35;
+        const src = actx.createMediaElementSource(player);   // só pode ser criado uma vez por elemento
+        src.connect(an);
+        an.connect(actx.destination);
+        abuf = new Uint8Array(an.fftSize);
+        analyser = an;
+      } catch (e) { analyser = null; }
+    } catch (e) { actx = null; analyser = null; }
+  }
+
+  function playBeepSeq() {   // 3 bipes cyber quando o timer termina
+    if (!actx) return;
+    try {
+      if (actx.state === 'suspended') actx.resume().catch(() => {});
+      const base = actx.currentTime;
+      for (let i = 0; i < 3; i++) {
+        const t0 = base + i * .24;
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'square';
+        o.frequency.setValueAtTime(660, t0);
+        o.frequency.exponentialRampToValueAtTime(990, t0 + .1);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(0.12, t0 + .012);
+        g.gain.linearRampToValueAtTime(0.0001, t0 + .14);
+        o.connect(g);
+        g.connect(actx.destination);
+        o.start(t0);
+        o.stop(t0 + .16);
+      }
+    } catch (e) {}
+  }
+
+  function playBeep(type) {
+    if (!actx) return;
+    try {
+      if (actx.state === 'suspended') actx.resume().catch(() => {});
+      const up = type === 'listen';
+      const f0 = up ? 440 : 660, f1 = up ? 880 : 330, dur = up ? .09 : .11;
+      const t0 = actx.currentTime;
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = up ? 'square' : 'sine';
+      o.frequency.setValueAtTime(f0, t0);
+      o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.08, t0 + .012);
+      g.gain.linearRampToValueAtTime(0.0001, t0 + dur + .02);
+      o.connect(g);
+      g.connect(actx.destination);
+      o.start(t0);
+      o.stop(t0 + dur + .04);
+    } catch (e) {}
+  }
+
+  function playWakeSound() {   // som cyber ascendente ao acordar: 330Hz -> 550Hz -> 880Hz
+    if (!actx) return;
+    try {
+      if (actx.state === 'suspended') actx.resume().catch(() => {});
+      const base = actx.currentTime + .02;
+      [330, 550, 880].forEach((f, i) => {
+        const t0 = base + i * .13, end = i === 2 ? .3 : .12;
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'square';
+        o.frequency.setValueAtTime(f * .96, t0);
+        o.frequency.exponentialRampToValueAtTime(f, t0 + .05);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(0.09, t0 + .012);
+        g.gain.linearRampToValueAtTime(0.0001, t0 + end);
+        o.connect(g);
+        g.connect(actx.destination);
+        o.start(t0);
+        o.stop(t0 + end + .03);
+      });
+    } catch (e) {}
+  }
+
+  function playGlitchSound() {   // interferência curta (OscillatorNode serra com frequência saltando)
+    if (!actx) return;
+    try {
+      if (actx.state === 'suspended') actx.resume().catch(() => {});
+      const t0 = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'sawtooth';
+      for (let i = 0; i < 14; i++) o.frequency.setValueAtTime(150 + Math.random() * 1800, t0 + i * .025);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.09, t0 + .01);
+      g.gain.linearRampToValueAtTime(0.0001, t0 + .36);
+      o.connect(g); g.connect(actx.destination);
+      o.start(t0); o.stop(t0 + .38);
+    } catch (e) {}
+  }
+
+  /* ---------- Canvas ---------- */
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const off = document.createElement('canvas');
+  const oc = off.getContext('2d');
+  let W = 0, H = 0, dpr = 1;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    W = window.innerWidth; H = window.innerHeight;
+    for (const c of [cv, off]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 150));
+  resize();
+
+  /* ---------- Estados e emoções ---------- */
+  const DEF = { sx: 1, sy: 1, dy: 0, lidL: 0, lidR: 0, hapL: 0, hapR: 0, angL: 0, angR: 0, spark: 0, fury: 0, horns: 0, tears: 0, xx: 0, joint: 0, ring: 0, slp: 0, rain: 0, dance: 0, glow: 0, c: '#E024A8' };
+  const MODES = {
+    idle:      { sy: .82, lidL: .18, lidR: .18, spark: 1 },
+    listening: { sx: 1.12, sy: 1.15, spark: .6, c: '#FF4FD8' },
+    thinking:  { sy: .6, dy: .12, lidL: .38, lidR: .38, c: '#8B5CF6' },
+    smirk:     { sy: .95, hapL: .6, lidR: .45, angR: .25, spark: 1, c: '#39FF14' },
+    wink:      { hapL: .9, lidL: .45, c: '#00F0FF' },
+    angry:     { sx: 1.04, angL: 1, angR: 1, fury: 1, c: '#FF1E56' },
+    surprised: { sx: .9, sy: 1.45, c: '#FACC15' },
+    evil:      { sy: .9, angL: .95, angR: .95, hapL: .25, hapR: .25, horns: 1, c: '#FF007F' },
+    crying:    { sy: .95, lidL: .1, lidR: .1, tears: 1, c: '#5B8CFF' },
+    dead:      { xx: 1, c: '#9C2A7A' },
+    glitch:    { sx: 1.02, c: '#FF2BD6' },
+    gamer:     { sy: .86, dy: .05, lidL: .48, lidR: .48, joint: 1, c: '#FF2A2A' },
+    focus:     { sy: .8, lidL: .1, lidR: .1, ring: 1, c: '#3B82F6' },
+    dance:     { sy: 1.02, spark: 1, dance: 1, c: '#FF00FF' },
+    hack:      { sy: .72, lidL: .42, lidR: .42, rain: 1, c: '#00FF41' },
+    sleep:     { slp: 1, c: '#4C1D95' },
+    wake:      { sx: 1.08, sy: 1.38, spark: 1, glow: 1, c: '#F5E9FF' },
+    scanning:  { sx: 1.08, sy: 1.08, ring: 1, spark: 1, c: '#00F0FF' },
+    bored:     { sy: .72, dy: .06, lidL: .5, lidR: .5, c: '#94A3B8' },
+    grumpy:    { sy: .7, dy: .05, lidL: .52, lidR: .45, angL: .55, angR: .55, c: '#FF5500' }   // mistura de bored + angry
+  };
+  const LABELS = [['idle','Idle'],['thinking','Pensando'],['smirk','Deboche'],['wink','Piscada'],['angry','Bravo'],['surprised','Surpreso'],['evil','Malicioso'],['crying','Chorando'],['dead','Morto'],['glitch','Glitch']];
+  const K = Object.keys(DEF).filter(k => k !== 'c').concat(['r', 'g', 'b']);
+  const hex = h => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16));
+
+  const bar = document.getElementById('bar');
+  const buttons = {};
+  LABELS.forEach(([m, label]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', e => { e.stopPropagation(); manual(m); });
+    bar.appendChild(b);
+    buttons[m] = b;
+  });
+
+  let isSleeping = false, hackUntil = 0, hackTimer = 0, pendingSleep = false;
+  let grumpyUntil = 0, grumpyTimer = 0, pendingGrumpy = null, tapGreeted = false;   // mau humor ao abrir/acordar
+  let shakeUntil = 0, shakeTimer = 0, faceDown = false, batLow = false;            // sensores
+  let gTx = 0, gTy = 0, gX = 0, gY = 0;                                            // paralaxe do giroscópio (px)
+  const grumpyOn = () => Date.now() < grumpyUntil, shakeOn = () => Date.now() < shakeUntil;
+  const tbtn = {};   // botões toggle: Chapa, Foco, Discoteca, Hacker, Dormir
+  const hackOn = () => Date.now() < hackUntil;
+  // cara de repouso: dormindo > hacker (7 s) > modo travado > idle
+  function restMode() { return isSleeping ? 'sleep' : (grumpyOn() ? 'grumpy' : (shakeOn() ? 'glitch' : (faceDown ? 'bored' : (hackOn() ? 'hack' : (lockedMode || 'idle'))))); }
+  function syncToggles() {
+    const st = { gamer: lockedMode === 'gamer', focus: lockedMode === 'focus', dance: lockedMode === 'dance', hack: hackOn(), sleep: isSleeping };
+    for (const k in tbtn) tbtn[k].classList.toggle('on', !!st[k]);
+  }
+
+  const T = {};
+  let mode = 'idle', talking = false, kick = 0;
+  function setMode(m) {
+    mode = m;
+    const d = Object.assign({}, DEF, MODES[m]);
+    const [r, g, b] = hex(d.c);
+    Object.assign(T, d, { r, g, b });
+    for (const k in buttons) buttons[k].classList.toggle('on', k === m);
+  }
+  setMode('idle');
+  const P = { lx: 0, ly: 0 };
+  K.forEach(k => { P[k] = T[k]; });
+
+  /* ---------- Animação ---------- */
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const GPAL = ['#FF007F', '#00F0FF', '#FFFFFF', '#E024A8', '#39FF14', '#FACC15'];
+  let last = performance.now();
+  let blinkStart = -1, nextBlink = 2.5;
+  let idleLook = { x: 0, y: 0 }, looking = false, nextLook = 3;
+  let jitV = 0, nextJit = 0, flick = 0, nextCol = 0, gcols = ['#FF007F', '#00F0FF'];
+
+  function frame(ts) {
+    const t = ts / 1000;
+    const dt = Math.min(.05, (ts - last) / 1000);
+    last = ts;
+
+    let blink = 0;
+    if (blinkStart < 0 && t > nextBlink) blinkStart = t;
+    if (blinkStart >= 0) {
+      const p = (t - blinkStart) / (mode === 'grumpy' ? .65 : .18);
+      if (p >= 1) { blinkStart = -1; nextBlink = t + (mode === 'grumpy' ? rand(.5, 1) : (Math.random() < .2 ? .12 : rand(2.2, 5.5))); }
+      else blink = Math.sin(p * Math.PI);
+    }
+    if (t > nextLook) {
+      if (looking) { idleLook = { x: 0, y: 0 }; looking = false; nextLook = t + rand(2, 4.5); }
+      else { idleLook = { x: (Math.random() < .5 ? -1 : 1) * rand(.4, .9), y: rand(-.3, .2) }; looking = true; nextLook = t + rand(.8, 1.6); }
+    }
+
+    let lx = 0, ly = 0, pulse = 0, shake = 0, jit = 0, alpha = 1, gl = 0;
+    if (mode === 'idle' || mode === 'smirk') { lx = idleLook.x; ly = idleLook.y; }
+    else if (mode === 'thinking') { lx = Math.sin(t * 1.9) * .6; ly = -.3 + Math.cos(t * 1.9) * .2; }
+    else if (mode === 'listening') pulse = Math.sin(t * 3.2) * .045;
+    else if (mode === 'angry') shake = Math.sin(t * 38) * .012;
+    else if (mode === 'surprised') pulse = Math.sin(t * 14) * .012;
+    else if (mode === 'glitch') {
+      gl = 1;
+      if (t > nextJit) { jitV = (Math.random() - .5) * .3; nextJit = t + .05; }
+      jit = jitV;
+      if (t > nextCol) { gcols = [GPAL[(Math.random() * GPAL.length) | 0], GPAL[(Math.random() * GPAL.length) | 0]]; nextCol = t + .09; }
+    } else if (mode === 'dead') {
+      if (flick > 0) { flick--; gl = .6; jit = (Math.random() - .5) * .2; alpha = Math.random() < .5 ? .25 : 1; }
+      else if (Math.random() < .015) flick = 4 + ((Math.random() * 6) | 0);
+    }
+
+    let bounce = 0;
+    if (mode === 'gamer') { lx = Math.sin(t * .55) * .28; ly = .1; pulse = Math.sin(t * 1.2) * .012; }
+    else if (mode === 'focus') { lx = 0; ly = 0; }
+    else if (mode === 'dance') {
+      const sw = Math.sin(ts * 0.012);                  // ritmo da discoteca
+      shake = sw * .24; bounce = -Math.abs(sw) * .1; pulse = Math.abs(sw) * .035;
+    } else if (mode === 'hack') {
+      gl = .15;
+      if (t > nextJit) { jitV = (Math.random() - .5) * .05; nextJit = t + .06; }
+      jit = jitV;                                       // tremor sutil
+      if (flick > 0) { flick--; gl = .7; jit = (Math.random() - .5) * .16; }
+      else if (Math.random() < .025) flick = 3 + ((Math.random() * 4) | 0);
+    } else if (mode === 'sleep') pulse = Math.sin(t * 1.1) * .02;
+    else if (mode === 'wake') pulse = Math.sin(t * 22) * .012;
+    else if (mode === 'scanning') { lx = Math.sin(t * 3.2) * .9; ly = Math.cos(t * 2.1) * .15; pulse = Math.sin(t * 10) * .015; }
+
+    kick *= Math.exp(-dt * 6);
+    let amp = 0, waveMode = 0;
+    if (talking) {
+      if (live && analyser) {   // volume real da voz
+        try {
+          analyser.getByteTimeDomainData(abuf);
+          let sum = 0;
+          for (let i = 0; i < abuf.length; i++) { const v = (abuf[i] - 128) / 128; sum += v * v; }
+          const rms = Math.sqrt(sum / abuf.length);
+          lvl += (rms - lvl) * (rms > lvl ? .7 : .25);
+          kick = Math.max(kick, Math.min(1, lvl * 4));
+          amp = Math.min(1, lvl * 4.5);
+          waveMode = 1;
+        } catch (e) { live = false; }
+      } else {                  // fallback: pulso antigo
+        amp = Math.min(1, Math.abs(Math.sin(t * 9.5) * Math.sin(t * 5.1 + 1)) * .8 + kick * .5);
+        waveMode = 2;
+      }
+    } else lvl = 0;
+
+    const k = 1 - Math.exp(-dt * 9);
+    K.forEach(key => { P[key] += (T[key] - P[key]) * k; });
+    const kl = 1 - Math.exp(-dt * (mode === 'idle' ? 14 : 7));
+    P.lx += (lx - P.lx) * kl;
+    P.ly += (ly - P.ly) * kl;
+    const kg = 1 - Math.exp(-dt * 6);
+    gX += (gTx - gX) * kg; gY += (gTy - gY) * kg;
+
+    draw({
+      pulse: pulse + amp * .05, shake, jit, gl, alpha, t, ts, dt, wm: waveMode, amp,
+      bob: -amp * .05 + Math.sin(t * 50) * amp * .012 + bounce,
+      open: mode === 'sleep' ? 1 : 1 - blink * .95
+    });
+    requestAnimationFrame(frame);
+  }
+
+  function star(c, x, y, r) {
+    c.beginPath();
+    c.moveTo(x, y - r); c.quadraticCurveTo(x, y, x + r, y);
+    c.quadraticCurveTo(x, y, x, y + r); c.quadraticCurveTo(x, y, x - r, y);
+    c.quadraticCurveTo(x, y, x, y - r); c.fill();
+  }
+
+  function draw(f) {
+    const eyeW = Math.min(W * .24, H * .28), eyeH = eyeW * 1.2, gap = eyeW * .7, cyy = H * .46;
+    let col = 'rgb(' + (P.r | 0) + ',' + (P.g | 0) + ',' + (P.b | 0) + ')';
+    let cols = [col, col];
+    if (mode === 'glitch') cols = gcols;
+    else if (mode === 'dance') { cols = [danceCol(f.t * 1.7), danceCol(f.t * 1.7 + 2)]; col = cols[0]; }
+
+    oc.setTransform(dpr, 0, 0, dpr, 0, 0);
+    oc.globalCompositeOperation = 'source-over';
+    oc.globalAlpha = 1;
+    oc.clearRect(0, 0, W, H);
+    oc.lineCap = 'round';
+
+    let rcx = 0, rcy = 0;
+    for (let i = 0; i < 2; i++) {
+      const s = i ? 1 : -1;
+      const w = eyeW * P.sx * (1 + f.pulse);
+      const h = eyeH * P.sy * (1 + f.pulse) * Math.max(f.open, .04);
+      const cx = W / 2 + s * (eyeW / 2 + gap / 2) + P.lx * eyeW * .45 + (f.shake + f.jit) * eyeW + gX;
+      const cy = cyy + P.ly * eyeH * .3 + (f.bob + P.dy) * eyeH + gY;
+      const lid = i ? P.lidR : P.lidL, hap = i ? P.hapR : P.hapL, ang = i ? P.angR : P.angL;
+      if (i) { rcx = cx; rcy = cy; }
+
+      // olho
+      oc.globalCompositeOperation = 'source-over';
+      oc.fillStyle = oc.strokeStyle = cols[i];
+      oc.globalAlpha = (1 - P.xx) * (1 - P.slp) * f.alpha;
+      oc.beginPath();
+      oc.roundRect(cx - w / 2, cy - h / 2, w, h, Math.min(w * .42, h / 2));
+      oc.fill();
+
+      // cortes: pálpebra, raiva, arco feliz e a cicatriz digital no olho direito
+      oc.globalCompositeOperation = 'destination-out';
+      oc.globalAlpha = 1;
+      oc.fillStyle = oc.strokeStyle = '#000';
+      if (lid > .01) oc.fillRect(cx - w, cy - h / 2 - 2, w * 2, h * lid + 2);
+      if (ang > .01) {
+        const ox = cx + s * (w / 2 + 6), ix = cx - s * (w / 2 + 6), top = cy - h / 2 - 6;
+        oc.beginPath();
+        oc.moveTo(ox, top); oc.lineTo(ix, top);
+        oc.lineTo(ix, top + 6 + h * .62 * ang);
+        oc.lineTo(ox, top + 6 + h * .05 * ang);
+        oc.closePath(); oc.fill();
+      }
+      if (hap > .01) {
+        const rr = w * .85, topY = cy + h / 2 - Math.min(hap, .95) * h * .62;
+        oc.beginPath(); oc.arc(cx, topY + rr, rr, 0, Math.PI * 2); oc.fill();
+      }
+      if (i) {
+        oc.lineWidth = Math.max(2, eyeW * .05);
+        oc.beginPath(); oc.moveTo(cx + w * .55, cy - h * .02); oc.lineTo(cx + w * .08, cy - h * .62); oc.stroke();
+      }
+
+      // detalhes: X, chifres, lágrimas de pixel, faíscas de fúria
+      oc.globalCompositeOperation = 'source-over';
+      oc.fillStyle = oc.strokeStyle = cols[i];
+      const A = f.alpha;
+      if (P.xx > .01) {
+        const d = w * .32;
+        oc.globalAlpha = P.xx * A; oc.lineWidth = eyeW * .09;
+        oc.beginPath();
+        oc.moveTo(cx - d, cy - d); oc.lineTo(cx + d, cy + d);
+        oc.moveTo(cx + d, cy - d); oc.lineTo(cx - d, cy + d);
+        oc.stroke();
+      }
+      if (P.slp > .01) {   // olho fechado em arco suave (dormindo)
+        oc.globalAlpha = P.slp * A; oc.lineWidth = Math.max(3, eyeW * .09);
+        oc.beginPath();
+        oc.moveTo(cx - w * .46, cy - h * .05);
+        oc.quadraticCurveTo(cx, cy + h * .2, cx + w * .46, cy - h * .05);
+        oc.stroke();
+      }
+      if (P.horns > .01) {
+        oc.globalAlpha = P.horns * A; oc.lineWidth = eyeW * .07;
+        oc.beginPath();
+        oc.moveTo(cx - s * w * .55, cy - h * .55);
+        oc.quadraticCurveTo(cx, cy - h * .7, cx + s * w * .9, cy - h * 1.05);
+        oc.stroke();
+      }
+      if (P.tears > .01) {
+        oc.globalAlpha = P.tears * A; oc.lineWidth = eyeW * .05;
+        for (let q = 0; q < 3; q++) {
+          const x = cx + (q - 1) * w * .3, ln = h * (.25 + .55 * ((f.t * .7 + q * .37 + i * .2) % 1));
+          oc.beginPath(); oc.moveTo(x, cy + h / 2); oc.lineTo(x, cy + h / 2 + ln); oc.stroke();
+        }
+      }
+      if (P.fury > .01) {
+        oc.globalAlpha = P.fury * A * (.6 + .4 * Math.sin(f.t * 30)); oc.lineWidth = eyeW * .05;
+        oc.beginPath();
+        oc.moveTo(cx + s * w * .55, cy - h * .62); oc.lineTo(cx + s * w * .82, cy - h * .85);
+        oc.moveTo(cx + s * w * .7, cy - h * .4); oc.lineTo(cx + s * w * .98, cy - h * .48);
+        oc.stroke();
+      }
+    }
+    if (P.spark > .01) {   // faísca de 4 pontas no canto
+      oc.globalAlpha = P.spark * f.alpha;
+      oc.fillStyle = cols[1];
+      star(oc, rcx + eyeW * .62, cyy + eyeH * .5, eyeW * .2 * (.85 + .15 * Math.sin(f.t * 4)));
+    }
+    oc.globalAlpha = 1;
+
+    // composição: aberração cromática (sombras ciano/magenta deslocadas) + brilho neon
+    const cw = Math.min(W, eyeW * 5.2) * dpr, ch = Math.min(H, eyeH * 3.4) * dpr;
+    const sx = Math.max(0, cv.width / 2 - cw / 2), sy = Math.max(0, cyy * dpr - ch / 2);
+    const BIG = 6000, nb = f.gl > .5 ? 5 : 1;
+    const sh = [];
+    for (let b = 0; b < nb; b++) sh.push(nb > 1 ? (Math.random() - .5) * 18 * dpr : 0);
+    const blit = dx => {
+      for (let b = 0; b < nb; b++) {
+        const by = sy + ch * b / nb, bh = ch / nb;
+        ctx.drawImage(off, sx, by, cw, bh, sx + dx + sh[b], by, cw, bh);
+      }
+    };
+    const ab = (2 + f.gl * 5 * Math.random()) * dpr;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    if (P.rain > .02) drawRain(f);   // chuva de 0 e 1 no fundo (modo hacker)
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.shadowBlur = 6 * dpr * (batLow ? .5 : 1);
+    ctx.shadowColor = '#00F0FF'; ctx.shadowOffsetX = BIG - ab; blit(-BIG);
+    ctx.shadowColor = '#FF2BD6'; ctx.shadowOffsetX = BIG + ab; blit(-BIG);
+
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowColor = col; ctx.shadowBlur = (26 + P.glow * 44) * dpr * (batLow ? .5 : 1); ctx.shadowOffsetX = 0;
+    blit(0);
+    ctx.shadowBlur = 0;
+    drawFx(f, { eyeW, eyeH, cyy, rcx, rcy });
+    drawWave(f, col, eyeW, eyeH, cyy);
+  }
+
+  /* ---------- Efeitos dos modos ---------- */
+  const DANCE_C = [[255, 0, 255], [182, 255, 0], [0, 255, 255], [255, 255, 0]];   // magenta, verde ácido, ciano, amarelo
+  function danceCol(pos) {
+    const n = DANCE_C.length, fl = Math.floor(pos), a = DANCE_C[fl % n], b = DANCE_C[(fl + 1) % n];
+    let u = pos - fl; u = u < .6 ? 0 : (u - .6) / .4; u = u * u * (3 - 2 * u);
+    return 'rgb(' + ((a[0] + (b[0] - a[0]) * u) | 0) + ',' + ((a[1] + (b[1] - a[1]) * u) | 0) + ',' + ((a[2] + (b[2] - a[2]) * u) | 0) + ')';
+  }
+
+  let rainCols = [], rainFs = 0;
+  function drawRain(f) {   // caracteres "0" e "1" caindo no fundo preto
+    const fs = Math.max(12, Math.round(Math.min(W, H) / 22)), n = Math.ceil(W / fs);
+    if (rainFs !== fs || rainCols.length !== n) {
+      rainFs = fs;
+      rainCols = Array.from({ length: n }, () => ({ y: -rand(0, H), v: rand(140, 340), len: 8 + ((Math.random() * 12) | 0), ch: Array.from({ length: 20 }, () => Math.random() < .5 ? '0' : '1') }));
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.shadowBlur = 0;
+    ctx.font = 'bold ' + fs + 'px ui-monospace, Menlo, Consolas, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let i = 0; i < n; i++) {
+      const d = rainCols[i], x = i * fs + fs / 2;
+      d.y += d.v * f.dt;
+      if (d.y - d.len * fs > H) { d.y = -rand(0, H * .6); d.v = rand(140, 340); d.len = 8 + ((Math.random() * 12) | 0); }
+      for (let k = 0; k < d.len; k++) {
+        const y = d.y - k * fs;
+        if (y < -fs || y > H) continue;
+        if (Math.random() < .03) d.ch[k] = Math.random() < .5 ? '0' : '1';
+        const a = P.rain * (k === 0 ? .95 : .55 * (1 - k / d.len));
+        ctx.fillStyle = k === 0 ? 'rgba(190,255,205,' + a + ')' : 'rgba(0,255,65,' + a + ')';
+        ctx.fillText(d.ch[k], x, y);
+      }
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  const smoke = []; let smokeAcc = 0;
+  function drawFx(f, g) {
+    const { eyeW, eyeH, cyy, rcx, rcy } = g;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+
+    // MODO FOCO: anel fino girando ao redor do olho direito
+    if (P.ring > .01) {
+      const rr = eyeW * .8 * (1 + f.pulse), ang = f.t * 1.9;
+      ctx.strokeStyle = '#93C5FD'; ctx.shadowColor = '#3B82F6'; ctx.shadowBlur = 12 * dpr;
+      ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1.5, eyeW * .03);
+      ctx.globalAlpha = P.ring * f.alpha;
+      for (let s = 0; s < 3; s++) { const a0 = ang + s * 2.0944; ctx.beginPath(); ctx.arc(rcx, rcy, rr, a0, a0 + 1.45); ctx.stroke(); }
+      ctx.globalAlpha = P.ring * f.alpha * .25; ctx.lineWidth = Math.max(1, eyeW * .012);
+      ctx.beginPath(); ctx.arc(rcx, rcy, rr, 0, 6.2832); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // MODO CHAPA: beck inclinado com brasa pulsando + fumaça subindo em zigue-zague
+    const th = Math.max(6, eyeW * .085), L = eyeW * .95, ang = -.5;
+    const bx = rcx + eyeW * .5, by = rcy + eyeH * .74;
+    const ex = bx + Math.cos(ang) * L / 2, ey = by + Math.sin(ang) * L / 2;
+    if (P.joint > .3 && mode === 'gamer') {
+      smokeAcc += f.dt * 24;
+      while (smokeAcc >= 1) {
+        smokeAcc -= 1;
+        if (smoke.length < 90) smoke.push({ x0: ex + rand(-1, 1), y0: ey - th * .4, age: 0, life: rand(2.4, 3.6), ph: rand(0, 6.28), s: rand(.7, 1.1) });
+      }
+    }
+    if (P.joint > .01) {
+      ctx.save();
+      ctx.translate(bx, by); ctx.rotate(ang);
+      ctx.globalAlpha = P.joint * f.alpha;
+      ctx.fillStyle = '#EFE8D8';
+      ctx.beginPath(); ctx.roundRect(-L / 2, -th / 2, L, th, th * .45); ctx.fill();
+      ctx.fillStyle = '#C8A46A';
+      ctx.beginPath(); ctx.roundRect(-L / 2, -th / 2, L * .2, th, th * .45); ctx.fill();
+      ctx.fillStyle = '#6B6B6B';
+      ctx.fillRect(L / 2 - L * .1, -th / 2, L * .08, th);
+      const pu = Math.max(.35, .7 + .3 * Math.sin(f.t * 5.5) + (Math.random() - .5) * .08);
+      const gr = ctx.createRadialGradient(L / 2, 0, 0, L / 2, 0, th * 1.7);
+      gr.addColorStop(0, 'rgba(255,214,120,' + (.95 * pu) + ')');
+      gr.addColorStop(.35, 'rgba(255,122,24,' + (.8 * pu) + ')');
+      gr.addColorStop(1, 'rgba(255,60,0,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(L / 2, 0, th * 1.7, 0, 6.2832); ctx.fill();
+      ctx.fillStyle = 'rgba(255,140,30,' + pu + ')'; ctx.shadowColor = '#FF6A00'; ctx.shadowBlur = 14 * dpr;
+      ctx.beginPath(); ctx.arc(L / 2, 0, th * .5, 0, 6.2832); ctx.fill();
+      ctx.restore();
+    }
+    for (let i = smoke.length - 1; i >= 0; i--) {
+      const p = smoke[i];
+      p.age += f.dt;
+      if (p.age >= p.life) { smoke.splice(i, 1); continue; }
+      const u = p.age / p.life;
+      const x = p.x0 + Math.sin(p.age * 4 + p.ph) * eyeW * .075 * (.35 + u * 1.2);   // zigue-zague
+      const y = p.y0 - p.age * eyeH * .3;
+      ctx.globalAlpha = Math.max(0, .5 * (1 - u) * Math.min(1, p.age * 5)) * P.joint * f.alpha;
+      ctx.fillStyle = 'rgb(214,216,222)';
+      ctx.beginPath(); ctx.arc(x, y, th * p.s * (.45 + u * 1.5), 0, 6.2832); ctx.fill();
+    }
+
+    // DORMIR: "z Z z" flutuando
+    if (P.slp > .01) {
+      const zs = ['z', 'Z', 'z'];
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#8B5CF6'; ctx.shadowColor = '#6D28D9'; ctx.shadowBlur = 10 * dpr;
+      for (let k = 0; k < 3; k++) {
+        const ph = (f.t * .32 + k / 3) % 1;
+        const x = rcx + eyeW * (.3 + .45 * ph) + Math.sin(ph * 7 + k) * eyeW * .05;
+        const y = rcy - eyeH * (.1 + .75 * ph);
+        ctx.globalAlpha = P.slp * Math.sin(ph * Math.PI) * f.alpha;
+        ctx.font = 'italic 700 ' + Math.round(eyeW * (.15 + .16 * ph)) + 'px system-ui, sans-serif';
+        ctx.fillText(zs[k], x, y);
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    // DISCOTECA: faíscas neon orbitando ao redor dos olhos
+    if (P.dance > .01) {
+      const rx = Math.min(eyeW * 2.05, W * .46), ry = eyeH * .95;
+      for (let k = 0; k < 9; k++) {
+        const a = f.t * 1.1 + k * .698;
+        const x = W / 2 + Math.cos(a) * rx * (.88 + .12 * Math.sin(f.t * 3 + k));
+        const y = cyy + Math.sin(a) * ry + Math.sin(f.ts * .012 + k) * eyeH * .05;
+        ctx.globalAlpha = P.dance * f.alpha * (.5 + .5 * Math.abs(Math.sin(f.t * 5 + k)));
+        ctx.fillStyle = ctx.shadowColor = danceCol(f.t * 1.7 + k * .9);
+        ctx.shadowBlur = 10 * dpr;
+        star(ctx, x, y, eyeW * (.07 + .05 * Math.abs(Math.sin(f.t * 6 + k * 1.7))));
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  // onda sonora neon logo abaixo dos olhos: volume real (AnalyserNode) ou simulada no fallback
+  function drawWave(f, col, eyeW, eyeH, cyy) {
+    for (let i = 0; i < WN; i++) {
+      let tg = 0;
+      if (f.wm === 1 && abuf) tg = Math.max(-1, Math.min(1, ((abuf[(i * (abuf.length - 1) / (WN - 1)) | 0] - 128) / 128) * 3.2));
+      else if (f.wm === 2) tg = Math.sin(i * .85 + f.t * 24) * f.amp * (.6 + .4 * Math.sin(i * .31 - f.t * 9));
+      wv[i] += (tg - wv[i]) * (f.wm ? .55 : .2);
+    }
+    const ww = Math.min(W * .72, eyeW * 4.4), x0 = (W - ww) / 2;
+    const y = Math.min(cyy + eyeH * .85, H - 125), ampPx = eyeH * .2;
+    const lev = f.wm ? Math.min(1, f.amp * 1.2) : 0;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = (.28 + .72 * lev) * f.alpha * (1 - P.xx * .7);
+    ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 10 * dpr;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i < WN; i++) {
+      const x = x0 + ww * i / (WN - 1), env = Math.sin(Math.PI * i / (WN - 1));
+      const yy = y + wv[i] * ampPx * env;
+      if (i) ctx.lineTo(x, yy); else ctx.moveTo(x, yy);
+    }
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x0, y - 4); ctx.lineTo(x0, y + 4);
+    ctx.moveTo(x0 + ww, y - 4); ctx.lineTo(x0 + ww, y + 4);
+    ctx.stroke();
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  /* ---------- Avisos ---------- */
+  const noticeEl = document.getElementById('notice');
+  const capEl = document.getElementById('caption');
+  let noticeTimer = 0;
+  function notify(msg, ms = 4500) {
+    noticeEl.textContent = msg;
+    noticeEl.classList.add('show');
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => noticeEl.classList.remove('show'), ms);
+  }
+  const caption = txt => { capEl.textContent = txt || ''; };
+
+  /* ---------- Visão: câmera traseira ---------- */
+  const camVideo = document.getElementById('camVideo');
+  const camCanvas = document.getElementById('camCanvas');
+  const flashEl = document.getElementById('flash');
+  let camState = '', camWarnUntil = 0;   // HUD: '' | 'ATIVA' | 'FALHOU'
+
+  function playShutter() {   // clique de obturador: dois estalos curtos de ruído filtrado
+    if (!actx) return;
+    try {
+      if (actx.state === 'suspended') actx.resume().catch(() => {});
+      [0, .07].forEach((d, i) => {
+        const t0 = actx.currentTime + d, len = i ? .09 : .05;
+        const buf = actx.createBuffer(1, Math.ceil(actx.sampleRate * len), actx.sampleRate), ch = buf.getChannelData(0);
+        for (let k = 0; k < ch.length; k++) ch[k] = (Math.random() * 2 - 1) * Math.pow(1 - k / ch.length, 2);
+        const src = actx.createBufferSource(), fl = actx.createBiquadFilter(), g = actx.createGain();
+        src.buffer = buf; fl.type = 'bandpass'; fl.frequency.value = i ? 1800 : 3200; fl.Q.value = .8;
+        g.gain.setValueAtTime(.55, t0); g.gain.exponentialRampToValueAtTime(.001, t0 + len);
+        src.connect(fl); fl.connect(g); g.connect(actx.destination);
+        src.start(t0); src.stop(t0 + len + .02);
+      });
+    } catch (e) {}
+  }
+
+  function triggerCameraSnap() {   // flash + som de obturador + olhos em 'scanning'
+    setMode('scanning');
+    playShutter();
+    flashEl.classList.add('snap');
+    requestAnimationFrame(() => requestAnimationFrame(() => flashEl.classList.remove('snap')));
+    try { if (navigator.vibrate) navigator.vibrate(30); } catch (e) {}
+  }
+
+  async function captureRearCameraFrame() {
+    let stream = null;
+    camState = 'ATIVA'; renderHud();
+    setMode('scanning');
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('sem câmera');
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 } }, audio: false });
+      camVideo.srcObject = stream;
+      try { await camVideo.play(); } catch (e) {}
+      const t0 = Date.now();
+      while ((camVideo.readyState < 2 || !camVideo.videoWidth) && Date.now() - t0 < 5000) await new Promise(r => setTimeout(r, 50));
+      if (!camVideo.videoWidth) throw new Error('sem frame');
+      await new Promise(r => setTimeout(r, 350));   // deixa o auto-exposição estabilizar
+      triggerCameraSnap();
+      const vw = camVideo.videoWidth, vh = camVideo.videoHeight, sc = Math.min(1, 512 / vw);
+      camCanvas.width = Math.round(vw * sc); camCanvas.height = Math.round(vh * sc);
+      camCanvas.getContext('2d').drawImage(camVideo, 0, 0, camCanvas.width, camCanvas.height);
+      const url = camCanvas.toDataURL('image/jpeg', 0.72);
+      camState = '';
+      return url;
+    } catch (e) {
+      camState = 'FALHOU'; camWarnUntil = Date.now() + 6000;
+      return null;
+    } finally {
+      if (stream) stream.getTracks().forEach(t => t.stop());   // desliga a câmera na hora
+      try { camVideo.srcObject = null; } catch (e) {}
+      if (camState === 'ATIVA') camState = '';
+      renderHud();
+    }
+  }
+
+  /* ---------- Fala e reconhecimento ---------- */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const hasTTS = 'speechSynthesis' in window;
+  let rec = null, phase = 'idle', session = 0;
+  let holdTimer = 0, fallbackTimer = 0;
+  let autoOn = false, followUntil = 0, awakeTimer = 0;
+  let ttsCtl = null, curUrl = null, kickTimer = 0;
+  let voice = null;
+
+  let voices = [];
+  function pickVoice() {
+    if (!hasTTS) return;
+    const vs = speechSynthesis.getVoices();
+    const nice = /google|natural|online/i;
+    const score = v => (/^pt[-_]BR$/i.test(v.lang) ? 2 : 0) + (nice.test(v.name) ? 1 : 0);
+    voices = vs.filter(v => /^pt/i.test(v.lang)).sort((a, b) => score(b) - score(a));
+    let saved = null;
+    try { saved = localStorage.getItem('voz'); } catch (e) {}
+    voice = voices.find(v => v.name === saved) || voices[0] || null;
+  }
+  if (hasTTS) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+
+  // volta ao repouso: se houver modo travado (ou hacker/dormir ativo), retorna a ele em vez de 'idle'
+  function goIdle() { phase = 'idle'; talking = false; setMode(restMode()); scheduleResume(); }
+
+  function stopAll() {
+    session++;
+    pendingSleep = false;
+    clearTimeout(holdTimer); clearTimeout(fallbackTimer); clearTimeout(awakeTimer);
+    clearInterval(kickTimer);
+    if (ttsCtl) { try { ttsCtl.abort(); } catch (e) {} ttsCtl = null; }
+    releaseAudio();
+    if (ctl) { try { ctl.abort(); } catch (e) {} ctl = null; }
+    const r = rec; rec = null;
+    if (r) { try { r.abort(); } catch (e) {} }
+    if (hasTTS) speechSynthesis.cancel();
+    talking = false;
+  }
+
+  function manual(m) {
+    stopAll();
+    clearHack(); lockedMode = null; applyRate();   // expressão manual assume o controle e destrava o modo
+    if (isSleeping) leaveSleep();
+    syncToggles();
+    phase = 'manual';
+    talking = false;
+    setMode(m);
+    caption('');
+  }
+
+  function startListening() {
+    if (!SR) { notify('Este navegador não suporta reconhecimento de voz.', 6000); return; }
+    stopAll();
+    const sid = session;
+    const r = new SR();
+    rec = r;
+    r.lang = 'pt-BR';
+    r.interimResults = true;
+    r.continuous = false;
+    r.maxAlternatives = 1;
+
+    let heard = '', errored = false;
+    phase = 'listening';
+    setMode('listening');
+    caption('');
+
+    r.onresult = e => {
+      if (rec !== r) return;
+      let interim = '', fin = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        if (res.isFinal) fin += res[0].transcript; else interim += res[0].transcript;
+      }
+      if (fin) heard = fin.trim();
+      caption(fin || interim);
+    };
+    r.onerror = e => {
+      if (rec !== r) return;
+      errored = true;
+      const err = e.error;
+      if (err === 'not-allowed' || err === 'service-not-allowed') notify('Microfone bloqueado. Libere a permissão do site no Chrome (use https ou localhost).', 7000);
+      else if (err === 'audio-capture') notify('Nenhum microfone encontrado.', 5000);
+      else if (err === 'network') notify('O reconhecimento de voz do Chrome precisa de internet.', 6000);
+      else if (err === 'no-speech') notify('Não ouvi nada. Toque e fale de novo.');
+      else if (err !== 'aborted') notify('Erro de áudio: ' + err);
+    };
+    r.onend = () => {
+      if (rec !== r || sid !== session) return;
+      rec = null;
+      if (heard) respondTo(heard);
+      else { if (!errored) notify('Não ouvi nada. Toque e fale de novo.'); goIdle(); }
+    };
+
+    try { r.start(); playBeep('listen'); }
+    catch (err) { rec = null; notify('Não foi possível iniciar o microfone.'); goIdle(); }
+  }
+
+  async function respondTo(text) {
+    const sid = session;
+    const forced = detectCmd(text);   // comandos de modo reconhecidos localmente (não dependem da IA)
+    playBeep('think');
+    phase = 'thinking';
+    setMode('thinking');
+    caption('“' + text + '”');
+    try {
+      const [reply] = await Promise.all([askGroq(text), new Promise(r => setTimeout(r, 1000))]);
+      if (sid !== session) return;
+      const act = forced || reply.act;
+      if (act) runAct(act, true);
+      speak(reply);
+    } catch (err) {
+      if (sid !== session) return;
+      notify(errorMessage(err), 6000);
+      caption('');
+      if (forced) runAct(forced, false);
+      goIdle();
+    }
+  }
+
+  function speak(reply) {
+    const sid = session;
+    let finished = false, usedNative = false;
+    phase = 'speaking';
+    caption(reply.text);
+
+    // olhos vibrando no ritmo da voz: pulso a cada 140 ms
+    // cara durante a fala: modo travado/hacker manda; senão vale a emoção da IA
+    const faceNow = () => { const b = restMode(); return b !== 'idle' ? b : (reply.face || 'idle'); };
+    const startEyes = isLive => {
+      setMode(faceNow());
+      talking = true;
+      clearInterval(kickTimer);
+      if (!isLive) kickTimer = setInterval(() => { kick = 1; }, 140);   // com analisador ativo, o volume real manda
+    };
+    const done = () => {
+      if (finished || sid !== session) return;
+      finished = true;
+      clearTimeout(fallbackTimer);
+      clearInterval(kickTimer);
+      releaseAudio();               // revokeObjectURL + limpeza do áudio
+      talking = false;
+      if (pendingSleep) { pendingSleep = false; enterSleep(); return; }   // "vai dormir": dorme depois de falar
+      if (restMode() === 'idle' && reply.face && reply.face !== 'idle') { phase = 'hold'; holdTimer = setTimeout(() => { if (sid === session) goIdle(); }, 2200); }
+      else goIdle();
+    };
+
+    // fallback: voz nativa do navegador
+    const useNative = () => {
+      if (usedNative || finished || sid !== session) return;
+      usedNative = true;
+      releaseAudio();
+      startEyes();
+      if (!hasTTS) { notify('Síntese de voz indisponível neste navegador.'); setTimeout(done, 2000); return; }
+      const u = new SpeechSynthesisUtterance(reply.text);
+      u.lang = 'pt-BR';
+      if (voice) u.voice = voice;
+      u.rate = voiceRate();
+      u.pitch = 1;
+      u.onboundary = () => { kick = 1; };
+      u.onend = done;
+      u.onerror = done;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+      clearTimeout(fallbackTimer);
+      fallbackTimer = setTimeout(() => { speechSynthesis.cancel(); done(); }, 4000 + reply.text.length * 110);
+    };
+
+    (async () => {
+      const c = new AbortController();
+      ttsCtl = c;
+      let timedOut = false;
+      const to = setTimeout(() => { timedOut = true; c.abort(); }, 12000);
+      try {
+        const res = await wfetch(FISH_URL, {
+          method: 'POST',
+          signal: c.signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: reply.text, format: 'mp3', reference_id: FISH_REF })
+        });
+        if (!res.ok) { const e = new Error('http'); e.status = res.status; throw e; }
+        const blob = await res.blob();
+        if (!blob.size) throw new Error('áudio vazio');
+        if (sid !== session) return;
+
+        const url = URL.createObjectURL(blob);
+        curUrl = url;
+        player.onplay = () => {
+          if (sid !== session || finished) return;
+          live = !!analyser;
+          applyRate();
+          startEyes(live);
+          clearTimeout(fallbackTimer);
+          const dur = isFinite(player.duration) && player.duration > 0 ? player.duration : 15;
+          fallbackTimer = setTimeout(done, (dur + 3) * 1000);   // segurança caso onended não dispare
+        };
+        player.onended = () => { done(); };                      // done() libera a URL (revokeObjectURL)
+        player.onerror = () => { notify('Voz Fish Audio: não foi possível tocar o áudio. Usando voz nativa.', 6000); useNative(); };
+        if (actx && actx.state === 'suspended') {
+          try { await Promise.race([actx.resume(), new Promise(r => setTimeout(r, 400))]); } catch (e) {}
+          if (sid !== session) return;
+        }
+        player.crossOrigin = 'anonymous';
+        player.src = url;
+        applyRate();   // trocar o src reseta a velocidade; reaplica (0.90 no gamer, 1.0 nos outros)
+        await player.play();
+      } catch (err) {
+        if (sid !== session) return;
+        const e = timedOut ? Object.assign(new Error('timeout'), { timeout: true }) : err;
+        notify('Voz Fish Audio: ' + fishError(e) + '. Usando voz nativa.', 8000);
+        useNative();
+      } finally {
+        clearTimeout(to);
+        if (ttsCtl === c) ttsCtl = null;
+      }
+    })();
+  }
+
+  /* ---------- Modo mãos livres (palavra de ativação "Jarvis") ---------- */
+  const WAKE_SRC = 'jarvis|jarvi|jarves|jarvez|jarbis|jarvs|garvis|charvis|jarvys';
+  const WAKE = new RegExp('\\b(' + WAKE_SRC + ')\\b[,.!?]?\\s*', 'gi');
+  const WAKE_TEST = new RegExp('\\b(' + WAKE_SRC + ')\\b');
+
+  /* ---------- Tela sempre acesa (Wake Lock) enquanto o Auto estiver ativo ---------- */
+  let wakeLock = null;
+  async function acquireWake() {
+    if (!autoOn || isSleeping) return;
+    try {
+      if (!navigator.wakeLock || (wakeLock && !wakeLock.released)) return;
+      const wl = await navigator.wakeLock.request('screen');
+      wakeLock = wl;
+      wl.addEventListener('release', () => { if (wakeLock === wl) wakeLock = null; });
+      if (!autoOn) releaseWake();
+    } catch (e) { wakeLock = null; }
+  }
+  function releaseWake() {
+    try { if (wakeLock) wakeLock.release(); } catch (e) {}
+    wakeLock = null;
+  }
+
+  function scheduleResume() {
+    if (!autoOn) return;
+    followUntil = 0;   // Auto: só responde quando ouvir "Jarvis"
+    setTimeout(() => { if (autoOn && phase === 'idle' && !rec) startPassive(); }, 400);
+  }
+
+  function stopAuto() {
+    autoOn = false;
+    releaseWake();
+    autoBtn.classList.remove('on');
+    stopAll();
+    goIdle();
+  }
+
+  function onAutoUtterance(raw) {
+    const s = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const woke = WAKE_TEST.test(s);
+    if (isSleeping) {   // dormindo: ignora tudo, exceto "jarvis" + acorda/acordar/bom dia
+      if (woke && /\b(acorda|acordar|bom dia)\b/.test(s)) { wakeUp(); return true; }
+      return false;
+    }
+    if (!woke && Date.now() >= followUntil) return false;   // ignora conversa alheia
+    const text = raw.replace(WAKE, '').trim();
+    clearTimeout(awakeTimer);
+    if (text.length < 2) {                                   // só chamou o nome
+      followUntil = Date.now() + 8000;
+      setMode('listening');
+      playBeep('listen');
+      caption('Pode falar…');
+      awakeTimer = setTimeout(() => { if (phase === 'passive') { setMode(restMode()); caption(''); } }, 8000);
+      return false;
+    }
+    stopAll();
+    respondTo(text);
+    return true;
+  }
+
+  function startPassive() {
+    if (!autoOn || rec) return;
+    const sid = session;
+    const r = new SR();
+    rec = r;
+    r.lang = 'pt-BR';
+    r.continuous = true;
+    r.interimResults = false;
+    r.maxAlternatives = 1;
+    phase = 'passive';
+
+    clearTimeout(awakeTimer);
+    if (Date.now() < followUntil) {
+      setMode('listening');
+      awakeTimer = setTimeout(() => { if (phase === 'passive') { setMode(restMode()); caption(''); } }, followUntil - Date.now());
+    } else setMode(restMode());
+
+    r.onresult = e => {
+      if (rec !== r) return;
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (!e.results[i].isFinal) continue;
+        if (onAutoUtterance(e.results[i][0].transcript)) return;
+      }
+    };
+    r.onerror = e => {
+      if (rec !== r) return;
+      const err = e.error;
+      if (err === 'not-allowed' || err === 'service-not-allowed') { notify('Microfone bloqueado. Libere a permissão do site no Chrome (use https ou localhost).', 7000); stopAuto(); }
+      else if (err === 'audio-capture') { notify('Nenhum microfone encontrado.', 5000); stopAuto(); }
+      else if (err === 'network') { notify('O reconhecimento de voz do Chrome precisa de internet.', 6000); stopAuto(); }
+      // no-speech / aborted: o onend reinicia sozinho
+    };
+    r.onend = () => {
+      if (rec !== r) return;
+      rec = null;
+      if (autoOn && phase === 'passive' && sid === session) setTimeout(startPassive, 300);
+    };
+    try { r.start(); }
+    catch (err) { rec = null; setTimeout(() => { if (autoOn && phase === 'passive') startPassive(); }, 1000); }
+  }
+
+  const autoBtn = document.createElement('button');
+  autoBtn.textContent = 'Auto';
+  autoBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    onFirstTap();
+    if (autoOn) { stopAuto(); notify('Mãos livres desligado.', 2500); return; }
+    if (!SR) { notify('Este navegador não suporta reconhecimento de voz.', 6000); return; }
+    autoOn = true;
+    autoBtn.classList.add('on');
+    acquireWake();
+    stopAll();
+    followUntil = 0;
+    phase = 'idle';
+    startPassive();
+    notify('Mãos livres ligado. Diga “Jarvis” e fale.', 5000);
+  });
+  bar.appendChild(autoBtn);
+
+  /* ---------- Modos especiais: fixos (lockedMode), hacker de 7 s e dormir/acordar ---------- */
+  const voiceRate = () => (lockedMode === 'gamer' ? 0.90 : 1.0);   // voz mais lenta só no modo gamer
+  function applyRate() { try { player.defaultPlaybackRate = voiceRate(); player.playbackRate = voiceRate(); } catch (e) {} }
+  const inTalkFlow = () => phase === 'listening' || phase === 'thinking';   // ao sair deles, goIdle() usa restMode()
+
+  function leaveSleep() { isSleeping = false; acquireWake(); triggerGrumpyWakeUp({ silent: true }); }
+
+  /* ---------- Mau humor de 3 s ao abrir a página e ao sair do sono ---------- */
+  function grumpyPhrase() {
+    const h = new Date().getHours();
+    if (h >= 5 && h < 12) return 'Agh... já me abriram de novo? Nem tomei meu café digital...';
+    if (h >= 12 && h < 18) return 'Ugh... justo agora que eu estava na minha soneca da tarde. Fala logo.';
+    if (h >= 18) return 'Hmpf... a noite mal começou e já me acordam. Que foi agora?';
+    return 'Sério? A essa hora da madrugada? Até os bits estão dormindo... Fala logo.';
+  }
+  function settleFace() {   // volta a restMode() (idle ou lockedMode) sem atrapalhar conversa em andamento
+    if (isSleeping || phase === 'listening' || phase === 'thinking' || phase === 'manual') return;
+    if (phase === 'waking') phase = 'idle';
+    setMode(restMode());
+    syncToggles();
+  }
+  function triggerGrumpyWakeUp(opts) {
+    opts = opts || {};
+    clearTimeout(grumpyTimer);
+    grumpyUntil = Date.now() + 3000;
+    grumpyTimer = setTimeout(() => { grumpyUntil = 0; settleFace(); }, 3000);
+    if (phase !== 'listening' && phase !== 'thinking' && phase !== 'manual') setMode('grumpy');
+    if (opts.silent) return;
+    const msg = { face: 'idle', text: grumpyPhrase() };   // face 'idle': durante os 3 s vale 'grumpy' via restMode()
+    if (opts.speakNow && !firstTap) speak(msg);
+    else { caption(msg.text); pendingGrumpy = msg; }       // fala no primeiro toque (onFirstTap)
+  }
+
+  function lockMode(m) {   // gamer | focus | dance ficam ativos até serem desativados
+    clearHack();
+    if (isSleeping) leaveSleep();
+    lockedMode = m;
+    applyRate(); syncToggles();
+    if (!inTalkFlow()) setMode(restMode());
+  }
+  function unlockNormal() {   // [normal]: destrava e volta os olhos para 'idle'
+    lockedMode = null;
+    clearHack();
+    applyRate(); syncToggles();
+    if (!isSleeping && !inTalkFlow()) setMode('idle');
+  }
+
+  function clearHack() { hackUntil = 0; clearTimeout(hackTimer); hackTimer = 0; }
+  function endHack() {   // fim dos 7 s: volta para lockedMode || 'idle'
+    clearHack(); syncToggles();
+    if (!isSleeping && !inTalkFlow() && phase !== 'waking') setMode(restMode());
+  }
+  function startHack() {   // NÃO trava lockedMode: expressão 'hack' por exatamente 7000 ms
+    if (isSleeping) leaveSleep();
+    clearTimeout(hackTimer);
+    hackUntil = Date.now() + 7000;
+    hackTimer = setTimeout(endHack, 7000);
+    syncToggles();
+    if (!inTalkFlow()) setMode('hack');
+  }
+
+  function enterSleep() {
+    clearHack();
+    stopAll();
+    lockedMode = null; pendingSleep = false; applyRate();
+    isSleeping = true;
+    releaseWake();
+    followUntil = 0;
+    talking = false; caption('');
+    phase = 'idle';
+    setMode('sleep');
+    syncToggles();
+    if (autoOn) startPassive();   // continua ouvindo, mas só reage a "jarvis" + acorda/bom dia
+  }
+
+  function greeting() {
+    const h = new Date().getHours();
+    return h >= 5 && h < 12 ? 'Bom dia! Já estou de pé.' : h >= 12 && h < 18 ? 'Boa tarde! Voltei da soneca.' : 'Boa noite! Estou acordado, pode falar.';
+  }
+
+  function wakeUp() {
+    if (!isSleeping) return;
+    isSleeping = false;
+    stopAll();
+    const sid = session;
+    playWakeSound();
+    phase = 'waking'; talking = false;
+    caption('');
+    acquireWake();                   // só reativa se o Auto estiver ligado
+    syncToggles();
+    triggerGrumpyWakeUp({ speakNow: true });   // 3 s de mau humor + saudação rabugenta falada
+  }
+
+  // comandos de voz reconhecidos localmente (a IA também pode mandar as tags)
+  const RE_NORMAL = /\bvolt(?:a|ar|e)\s+(?:ao|pro|pra|para o)\s+normal\b|\bmodo\s+normal\b|\bdesativ(?:a|ar|e)\s+(?:o\s+)?modo\b|\bsa(?:i|ir|ia)\s+do\s+modo\b|\b(?:para|parar|pare|chega)\s+de\s+danc(?:a|ar)\b/;
+  const RE_SLEEP = /\bvai\s+dormir\b|\bdormir\b/;
+  const RE_HACK = /\bmodo\s+hacker\b|\bhackear\b|\bhackeia\b|\bhackea\b/;
+  const RE_GAMER = /\bvamos\s+chapar\b|\bmodo\s+gamer\b|\bmodo\s+proibido\b/;
+  const RE_FOCUS = /\bmodo\s+foco\b|\bhora\s+de\s+estudar\b/;
+  const RE_DANCE = /\bdanca\b|\bvamos\s+dancar\b|\bmodo\s+discoteca\b|\bfesta\b/;
+  function detectCmd(raw) {
+    const s = String(raw).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (RE_NORMAL.test(s)) return 'normal';
+    if (RE_SLEEP.test(s)) return 'sleep';
+    if (RE_HACK.test(s)) return 'hack';
+    if (RE_GAMER.test(s)) return 'gamer';
+    if (RE_FOCUS.test(s)) return 'focus';
+    if (RE_DANCE.test(s)) return 'dance';
+    return null;
+  }
+
+  function runAct(act, speaking) {
+    if (act === 'normal') unlockNormal();
+    else if (act === 'gamer' || act === 'focus' || act === 'dance') lockMode(act);
+    else if (act === 'hack') startHack();
+    else if (act === 'sleep') { if (speaking) pendingSleep = true; else enterSleep(); }
+    else if (act === 'wakeup') { if (isSleeping) wakeUp(); }
+  }
+
+  function toggleMode(m) {
+    if (m === 'sleep') { if (isSleeping) wakeUp(); else enterSleep(); return; }
+    if (m === 'hack') { if (hackOn()) endHack(); else startHack(); return; }
+    if (lockedMode === m && !isSleeping) unlockNormal(); else lockMode(m);
+  }
+
+  [['gamer', 'Chapa'], ['focus', 'Foco'], ['dance', 'Discoteca'], ['hack', 'Hacker'], ['sleep', 'Dormir']].forEach(([m, label]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', e => { e.stopPropagation(); onFirstTap(); toggleMode(m); });
+    bar.appendChild(b);
+    tbtn[m] = b;
+  });
+  syncToggles();
+
+  /* ---------- Voz (Fish Audio via Cloudflare Worker) ---------- */
+  const FISH_URL = 'https://jarvis-api.emanuelpedro086.workers.dev/tts';
+  const FISH_REF = 'a5b93aeddcc948c19ea04f0afe9d178c';
+
+  function releaseAudio() {
+    player.onplay = player.onended = player.onerror = null;
+    live = false;
+    try { player.pause(); } catch (e) {}
+    if (curUrl) { URL.revokeObjectURL(curUrl); curUrl = null; }
+  }
+
+  function fishError(err) {
+    if (err.status === 401 || err.status === 403) return 'chave inválida ou sem permissão (' + err.status + ')';
+    if (err.status === 402) return 'sem créditos (402)';
+    if (err.status === 429) return 'limite de uso atingido (429)';
+    if (err.status) return 'erro HTTP ' + err.status;
+    if (err.timeout) return 'tempo esgotado';
+    if (err.name === 'TypeError') return 'falha de rede ou bloqueio de CORS';
+    if (err.name === 'NotAllowedError') return 'o navegador bloqueou o autoplay do áudio';
+    return err.message || 'erro desconhecido';
+  }
+
+  /* ---------- IA (Groq) ---------- */
+  const GROQ_URL = 'https://jarvis-api.emanuelpedro086.workers.dev/chat';
+  const GROQ_MODEL = 'llama-3.3-70b-versatile';
+  const SEARCH_URL = 'https://jarvis-api.emanuelpedro086.workers.dev/search';
+  const VISION_RE = /\b(olha isso|olha aqui|o que e isso|o que voce ve|enxerga\w*|analisa isso|le isso|mostra)\b/;
+  const history = [];   // últimas 8 mensagens (user e assistant)
+  let ctl = null;
+
+  /* ---------- HUD: telemetria e timers ---------- */
+  const hudL = document.getElementById('hudL'), hudR = document.getElementById('hudR');
+  let pingMs = null, lastOk = true, memCount = 0;
+  const timers = [];   // { end } em ms (Date.now)
+
+  /* ---------- Sarcasmo regulável e bateria (HUD) ---------- */
+  const SARC_KEY = 'jarvis_sarcasm', SARC_STEPS = [20, 50, 80, 100];
+  let sarcasmLevel = 80, sarcLocal = false, batInfo = null, batWarned = false;
+  try { const v = parseInt(localStorage.getItem(SARC_KEY), 10); if (isFinite(v)) sarcasmLevel = Math.max(0, Math.min(100, v)); } catch (e) {}
+  function setSarcasm(n) {
+    n = Math.max(0, Math.min(100, Math.round(Number(n))));
+    if (!isFinite(n)) return;
+    sarcasmLevel = n;
+    try { localStorage.setItem(SARC_KEY, String(n)); } catch (e) {}
+    renderHud();
+  }
+  function detectSarcasm(raw) {   // comandos de voz locais: "sarcasmo em 100%", "menos sarcasmo", "sem sarcasmo"
+    const t = normTxt(raw);
+    if (t.indexOf('sarcasmo') < 0) return null;
+    const m = t.match(/sarcasmo\s*(?:em|a|para|pra|de|no)?\s*(\d{1,3})/) || t.match(/(\d{1,3})\s*(?:por cento)?\s*(?:de\s*)?sarcasmo/);
+    if (m) return Math.max(0, Math.min(100, parseInt(m[1], 10)));
+    if (/\b(?:sem|zero|nenhum)\s+sarcasmo|\bsarcasmo\s+(?:zero|desligado)|\bdesliga\w*\s+(?:o\s+)?sarcasmo/.test(t)) return 0;
+    const ladder = [0].concat(SARC_STEPS);
+    if (/\bmenos\s+sarcasmo|\b(?:diminui|abaixa|reduz)\w*\s+(?:o\s+)?sarcasmo/.test(t)) { const lo = ladder.filter(v => v < sarcasmLevel); return lo.length ? lo[lo.length - 1] : 0; }
+    if (/\bmais\s+sarcasmo|\b(?:aumenta|sobe)\w*\s+(?:o\s+)?sarcasmo|\bsarcasmo\s+(?:maximo|total)/.test(t)) { const hi = ladder.filter(v => v > sarcasmLevel); return hi.length ? hi[0] : 100; }
+    return null;
+  }
+  const sarcBtn = document.getElementById('sarcBtn');
+  sarcBtn.addEventListener('click', e => {   // toque no "SARC" do HUD: 20 -> 50 -> 80 -> 100 -> 20
+    e.stopPropagation();
+    const nx = SARC_STEPS.find(v => v > sarcasmLevel) || SARC_STEPS[0];
+    setSarcasm(nx);
+    notify('Sarcasmo: ' + nx + '%', 1800);
+  });
+
+  async function wfetch(url, opts) {   // fetch ao Worker medindo a latência real
+    const t0 = performance.now();
+    try {
+      const res = await fetch(url, opts);
+      pingMs = Math.round(performance.now() - t0);
+      lastOk = res.ok;
+      return res;
+    } catch (e) {
+      if (!(opts && opts.signal && opts.signal.aborted)) lastOk = false;
+      throw e;
+    }
+  }
+
+  const fmtT = sec => {
+    sec = Math.max(0, Math.ceil(sec));
+    const h = (sec / 3600) | 0, m = ((sec % 3600) / 60) | 0, s2 = sec % 60, p = n => String(n).padStart(2, '0');
+    return (h ? h + ':' : '') + p(m) + ':' + p(s2);
+  };
+
+  function renderHud() {
+    const sys = !navigator.onLine ? '<span class="bad">OFFLINE</span>' : (lastOk ? 'ONLINE' : '<span class="warn">DEGRADED</span>');
+    hudL.innerHTML = 'SYS: ' + sys + '\nMEM: ' + memCount + (camState === 'ATIVA' ? '\n<span class="warn">CAM: ATIVA</span>' : (Date.now() < camWarnUntil ? '\n<span class="warn">CAM: INDISPONÍVEL</span>' : ''));
+    const now = Date.now();
+    let r = 'PING: ' + (pingMs === null ? '--' : pingMs + 'ms');
+    r += '\nSARC: ' + sarcasmLevel + '%';
+    if (batInfo) r += '\n<span class="' + (batLow ? 'warn' : (batInfo.chg ? 'tm' : '')) + '">BAT: ' + batInfo.pct + '%' + (batInfo.chg ? ' +' : '') + '</span>';
+    timers.forEach(t => { r += '\n<span class="tm">TIMER ' + fmtT((t.end - now) / 1000) + '</span>'; });
+    hudR.innerHTML = r;
+  }
+
+  function addTimer(sec) {
+    sec = Math.round(sec);
+    if (!(sec >= 1)) return;
+    if (timers.length >= 4) timers.shift();
+    timers.push({ end: Date.now() + Math.min(sec, 86400) * 1000 });
+    renderHud();
+  }
+
+  function timerDone() {
+    playBeepSeq();
+    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]); } catch (e) {}
+    notify('Tempo esgotado!', 5000);
+    hudR.classList.remove('flash'); void hudR.offsetWidth; hudR.classList.add('flash');
+  }
+
+  setInterval(() => {
+    const now = Date.now();
+    let done = false;
+    for (let i = timers.length - 1; i >= 0; i--) if (timers[i].end <= now) { timers.splice(i, 1); done = true; }
+    if (done) timerDone();
+    renderHud();
+  }, 250);
+  window.addEventListener('online', renderHud);
+  window.addEventListener('offline', renderHud);
+
+  const WEATHER_URL = 'https://jarvis-api.emanuelpedro086.workers.dev/weather';
+  const EMO = 'idle|thinking|smirk|wink|angry|surprised|evil|crying|glitch';
+  const EMO_LIST = EMO.split('|');
+  const MODE_LIST = ['gamer', 'focus', 'dance', 'hack', 'sleep', 'wakeup', 'normal'];
+
+  /* ---------- Memória permanente (localStorage) ---------- */
+  const MEM_KEY = 'jarvis_memories', MEM_MAX = 15;
+  const normTxt = t => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  function loadMem() {
+    try {
+      const a = JSON.parse(localStorage.getItem(MEM_KEY) || '[]');
+      return Array.isArray(a) ? a.filter(x => typeof x === 'string' && x.trim()).slice(-MEM_MAX) : [];
+    } catch (e) { return []; }
+  }
+  function storeMem(a) { try { localStorage.setItem(MEM_KEY, JSON.stringify(a.slice(-MEM_MAX))); } catch (e) {} memCount = Math.min(a.length, MEM_MAX); renderHud(); }
+
+  function addMem(fact) {
+    fact = String(fact).replace(/\s+/g, ' ').trim().slice(0, 100);
+    const n = normTxt(fact);
+    if (fact.length < 3 || !n) return;
+    const mem = loadMem();
+    for (let i = 0; i < mem.length; i++) {
+      const x = normTxt(mem[i]);
+      if (!x) continue;
+      if (x === n || x.includes(n)) return;          // já sabido
+      if (n.includes(x)) { mem.splice(i, 1); break; } // versão mais completa substitui a antiga
+    }
+    mem.push(fact);
+    while (mem.length > MEM_MAX) mem.shift();
+    storeMem(mem);
+  }
+
+  // captura [save: ...] (inclusive cortada pelo limite de tokens), salva e remove do texto
+  function takeSaves(raw) {
+    return raw
+      .replace(/\[save:\s*([^\]]*)\]/gi, (_, f) => { addMem(f); return ' '; })
+      .replace(/\[timer:\s*([^\]]*)\]/gi, (_, v) => { const n = parseFloat(String(v).replace(',', '.')); if (isFinite(n)) addTimer(n); return ' '; })
+      .replace(/\[sarcasm:\s*([^\]]*)\]/gi, (_, v) => { if (!sarcLocal) { const n = parseFloat(String(v).replace(',', '.')); if (isFinite(n)) setSarcasm(n); } return ' '; })
+      .replace(/\[(?:save|timer|sarcasm):?[^\]]*$/i, '')
+      .trim();
+  }
+
+  const memBtn = document.getElementById('memBtn');
+  const MEM_LABEL = memBtn.textContent;
+  let memArm = 0;
+  memBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!memArm) {
+      memBtn.textContent = 'confirmar?';
+      memArm = setTimeout(() => { memArm = 0; memBtn.textContent = MEM_LABEL; }, 3000);
+      return;
+    }
+    clearTimeout(memArm); memArm = 0;
+    memBtn.textContent = MEM_LABEL;
+    try { localStorage.removeItem(MEM_KEY); } catch (err) {}
+    memCount = 0; renderHud();
+    history.length = 0;
+    notify('Memória apagada.', 2500);
+  });
+
+  memCount = loadMem().length;
+  renderHud();
+
+  /* ---------- Prompt ---------- */
+  function buildSystem(noWeather, noTools) {
+    const d = new Date();
+    const agora = d.toLocaleString('pt-BR') + ' (' + d.toLocaleDateString('pt-BR', { weekday: 'long' }) + ')';
+    const mem = loadMem();
+    return 'Você é o Jarvis, um pequeno robô punk que vive na tela de um celular e se expressa com os olhos. ' +
+      'Seu nome é Jarvis; se perguntarem quem você é, apresente-se assim. ' +
+      'Personalidade: irreverente, irônica, carismática e debochada, sem ser ofensivo. ' +
+      'Nível de sarcasmo atual: ' + sarcasmLevel + '%. Se 0-30%, seja educado e direto; se 40-70%, irônico leve; se 80-100%, extremamente ácido, debochado e punk (sem ofender de verdade). ' +
+      'Se o usuário pedir para mudar o sarcasmo (ex: "sarcasmo em 100%", "menos sarcasmo"), inclua no final da resposta a tag invisível [sarcasm: VALOR] com VALOR de 0 a 100 e confirme em poucas palavras; nunca mencione a tag. ' +
+      'Responda sempre em português brasileiro natural, em no máximo 2 frases curtas, porque sua resposta será falada em voz alta. ' +
+      'Comece SEMPRE com exatamente uma tag de emoção entre colchetes, escolhida conforme o clima da resposta: ' +
+      '[idle] neutro ou tranquilo, [thinking] refletindo ou entediado, [smirk] deboche ou sorriso de canto, ' +
+      '[wink] cumplicidade ou piada interna, [angry] bravo ou irritado, [surprised] surpreso, ' +
+      '[evil] malicioso ou sarcasmo pesado, [crying] triste ou dramático, [glitch] caótico ou bugado. ' +
+      'Use somente essas tags de emoção, uma única vez, no início (exceto as tags de modo, [weather: ...], [save: ...] e [timer: ...], descritas abaixo). ' +
+      'Você também controla modos especiais do robô. Para mudar de modo, escreva UMA tag de modo logo depois da tag de emoção, somente quando o usuário pedir claramente: ' +
+      '[gamer] para o modo chapa/gamer ("vamos chapar", "modo gamer", "modo proibido"), ' +
+      '[focus] para o modo foco/estudos ("modo foco", "hora de estudar"), ' +
+      '[dance] para o modo discoteca ("dança", "modo discoteca", "festa"), ' +
+      '[hack] para o modo hacker, que dura só 7 segundos ("modo hacker", "hackear"), ' +
+      '[sleep] para dormir ("vai dormir", "dormir"), ' +
+      '[wakeup] para acordar ("acorda", "bom dia") e ' +
+      '[normal] para desativar o modo fixo atual e voltar ao normal ("voltar ao normal", "desativar modo", "sair do modo", "para de dançar"). ' +
+      '[gamer], [focus] e [dance] ficam ativos até o usuário desativar; [hack] volta sozinho ao modo anterior. ' +
+      'Nunca use tag de modo por conta própria, nunca repita a tag de um modo que já está ativo e nunca mencione as tags. ' +
+      'Modo fixo atual do robô: ' + (lockedMode || 'normal') + '. ' +
+      (lockedMode === 'gamer' ? 'Você está no modo gamer/chapa: sua personalidade agora é super calma, tranquila, relaxada e bem-humorada, falando de forma leve e sem agressividade. ' : '') +
+      (lockedMode === 'focus' ? 'Você está no modo foco/estudos: seja mais direto, objetivo e produtivo para ajudar o usuário a estudar, sem piadas longas. ' : '') +
+      (lockedMode === 'dance' ? 'Você está no modo discoteca: seja animado, festeiro e empolgado. ' : '') +
+      'Não use emojis, markdown, listas nem asteriscos. ' +
+      'Data e hora exatas do dispositivo do usuário agora: ' + agora + '. Use quando perguntarem sobre data, hora ou dia da semana. ' +
+      'Memórias permanentes sobre o usuário: ' + (mem.length ? mem.join('; ') : 'nenhuma ainda') + '. Use-as com naturalidade, sem recitar a lista. ' +
+      'Sempre que o usuário revelar algo novo e importante sobre si (nome, gostos, família, irmão, rotina, piadas internas), ' +
+      'inclua no final da resposta uma tag invisível no formato [save: fato curto], por exemplo [save: o irmão se chama Pedro]. ' +
+      'O fato deve ser curto, em português, e não repetir o que já está nas memórias. Não salve trivialidades e nunca mencione a tag. ' +
+      'Se o usuário pedir para marcar um tempo, cronômetro, timer ou alarme (ex: "me avisa em 2 minutos"), confirme em poucas palavras e inclua no final da resposta a tag invisível [timer: segundos] com o total em segundos (ex: [timer: 120]). ' +
+      'Converta minutos e horas para segundos e, se for um horário do relógio, calcule os segundos restantes a partir da hora atual. Se ele não disser quanto tempo, pergunte em vez de chutar. Nunca mencione a tag. ' +
+      (noWeather
+        ? 'Os dados reais do clima virão na mensagem do usuário; NUNCA use a tag [weather] nesta resposta. '
+        : 'Se o usuário perguntar sobre clima, temperatura, chuva ou previsão do tempo, responda APENAS com a tag [weather: Nome da Cidade] (por exemplo [weather: São Paulo] ou [weather: Tóquio]), sem mais nada e sem tag de emoção, pois o app buscará os dados reais. Se o usuário não especificar nenhuma cidade, use [weather: Luziânia]. ') +
+      (noTools
+        ? 'Se uma imagem da câmera ou resultados de pesquisa vierem na mensagem do usuário, use-os para responder; NUNCA use as tags [vision] nem [search] nesta resposta. '
+        : 'Você tem uma câmera traseira: se o usuário pedir para olhar, ver, ler ou analisar algo à frente dele e nenhuma imagem foi enviada, responda APENAS com a tag [vision], sem mais nada. ' +
+          'Quando uma imagem vier anexada, descreva ou analise o que vê em até 2 frases curtas, com humor. ' +
+          'Se o usuário perguntar sobre notícias recentes, fatos atuais, significados, pessoas, eventos ou qualquer informação que precise de busca na internet, responda APENAS com a tag [search: termo de pesquisa curto], sem mais nada e sem tag de emoção. ');
+  }
+
+  async function chatCall(messages, signal, maxTokens, temp, vision) {
+    const res = await wfetch(GROQ_URL, {
+      method: 'POST',
+      signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(vision ? { messages } : { model: GROQ_MODEL, messages, temperature: temp, max_tokens: maxTokens })   // visão: JSON padrão só com messages, sempre para /chat
+    });
+    if (!res.ok) { const e = new Error('http'); e.status = res.status; throw e; }
+    const data = await res.json();
+    const msg = data.choices && data.choices[0] && data.choices[0].message;
+    return ((msg && msg.content) || '').trim();
+  }
+
+  function parseReply(raw) {
+    const tags = (raw.match(/\[[A-Za-z]+\]/g) || []).map(x => x.slice(1, -1).toLowerCase());
+    const face = tags.find(x => EMO_LIST.includes(x)) || 'idle';
+    const act = tags.find(x => MODE_LIST.includes(x)) || null;   // tag de modo (removida do texto abaixo)
+    const clean = raw.replace(/\[(?:weather|search|vision)[^\]]*\]?/gi, '').replace(/\[[A-Za-zÀ-ÿ]+\]/g, '').replace(/[*_#`]/g, '').replace(/\s+/g, ' ').trim();
+    return { face, text: clean, act };
+  }
+
+  async function fetchWeather(city, signal) {
+    const res = await wfetch(WEATHER_URL + '?city=' + encodeURIComponent(city), { signal });
+    if (!res.ok) { const e = new Error('http'); e.status = res.status; throw e; }
+    const d = await res.json();
+    const cur = d && d.current;
+    if (!cur || typeof cur.temperature_2m !== 'number') throw new Error('sem dados de clima');
+    let loc = d.location;
+    if (loc && typeof loc === 'object') loc = loc.name || loc.city || '';
+    loc = (typeof loc === 'string' && loc.trim()) ? loc.trim() : city;
+    return { loc, temp: cur.temperature_2m, rain: typeof cur.precipitation_probability === 'number' ? cur.precipitation_probability : null };
+  }
+
+  async function fetchSearch(term, signal) {
+    const res = await wfetch(SEARCH_URL + '?q=' + encodeURIComponent(term), { signal });
+    if (!res.ok) { const e = new Error('http'); e.status = res.status; throw e; }
+    const body = await res.text();
+    let out = body;
+    try {
+      const d = JSON.parse(body);
+      const arr = Array.isArray(d) ? d : (d.results || d.items || d.organic || d.data || null);
+      if (Array.isArray(arr)) out = arr.slice(0, 5).map((x, i) => (i + 1) + '. ' + [x.title, x.snippet || x.description || x.content || x.text].filter(Boolean).join(' - ')).join('\n');
+      else if (typeof d === 'string') out = d;
+      else if (d.answer || d.summary) out = String(d.answer || d.summary);
+      else out = JSON.stringify(d);
+    } catch (e) {}
+    out = String(out).replace(/\s+/g, ' ').trim().slice(0, 1800);
+    if (!out) throw new Error('sem resultados');
+    return out;
+  }
+
+  async function askGroq(text) {
+    const c = new AbortController();
+    ctl = c;
+    let timedOut = false, to = 0;
+    const arm = ms => { clearTimeout(to); to = setTimeout(() => { timedOut = true; c.abort(); }, ms); };
+    arm(15000);
+    try {
+      sarcLocal = false;
+      const ls = detectSarcasm(text);
+      if (ls !== null) { setSarcasm(ls); sarcLocal = true; }   // vale já neste prompt
+      let image = null, usedImage = false;
+      if (VISION_RE.test(normTxt(text))) {   // gatilho por palavra-chave: captura ANTES de chamar /chat
+        image = await captureRearCameraFrame();
+        if (c.signal.aborted) throw new Error('abort');
+        if (!image) { const r0 = { face: 'crying', text: 'Não consegui abrir a câmera. Libere a permissão do site no Chrome e tente de novo.' }; return r0; }
+        usedImage = true;
+        arm(20000);
+      }
+      const userMsg = img => img ? { role: 'user', content: [{ type: 'text', text }, { type: 'image_url', image_url: { url: img } }] } : { role: 'user', content: text };
+      let raw = takeSaves(await chatCall([{ role: 'system', content: buildSystem(false, !!image) }, ...history, userMsg(image)], c.signal, 400, 0.8, !!image));
+      let reply = parseReply(raw);
+
+      if (!image && /\[vision\]/i.test(raw)) {   // tag da IA: captura o frame e reenvia a pergunta com a imagem
+        image = await captureRearCameraFrame();
+        if (c.signal.aborted) throw new Error('abort');
+        if (!image) return { face: 'crying', text: 'Não consegui abrir a câmera. Libere a permissão do site no Chrome e tente de novo.' };
+        usedImage = true;
+        arm(20000);
+        raw = takeSaves(await chatCall([{ role: 'system', content: buildSystem(false, true) }, ...history, userMsg(image)], c.signal, 400, 0.8, true));
+        reply = parseReply(raw);
+      }
+      if (usedImage) setTimeout(() => { if (phase === 'thinking') setMode('thinking'); }, 600);
+
+      const sm = raw.match(/\[search:\s*([^\]\n]*)/i);
+      if (sm && !image) {   // pesquisa na web em tempo real
+        const term = sm[1].replace(/\s+/g, ' ').trim() || text;
+        arm(20000);
+        let found = null;
+        try { found = await fetchSearch(term, c.signal); } catch (e) { if (c.signal.aborted) throw e; }
+        if (found) {
+          const tone = lockedMode === 'gamer' ? 'calma, tranquila e bem-humorada' : lockedMode === 'focus' ? 'direta e objetiva' : 'curta, natural e bem-humorada';
+          reply = { face: 'smirk', text: '' };
+          const raw2 = takeSaves(await chatCall([
+            { role: 'system', content: buildSystem(true, true) }, ...history,
+            { role: 'user', content: 'Resultados reais da pesquisa na web para "' + term + '": ' + found + '. O usuário perguntou: "' + text + '". ' +
+              'Responda em no máximo duas frases curtas, ' + tone + ', usando só o que os resultados dizem, começando com uma tag de emoção (nunca [search]) e sem links, sem markdown.' }
+          ], c.signal, 220, 0.8));
+          reply = parseReply(raw2);
+          raw = raw2.replace(/\[(?:weather|search|vision)[^\]]*\]?/gi, '');
+        } else {
+          reply = { face: 'crying', text: 'Tentei pesquisar sobre ' + term + ', mas a internet me deixou no vácuo.' };
+          raw = '[crying] ' + reply.text;
+        }
+      }
+
+      const wm = raw.match(/\[weather(?::\s*([^\]]*))?\]/i);
+      if (wm) {
+        const city = (wm[1] || '').replace(/\s+/g, ' ').trim() || 'Luziânia';
+        arm(20000);
+        let wx = null;
+        try { wx = await fetchWeather(city, c.signal); } catch (e) { if (c.signal.aborted) throw e; }
+        reply = { face: 'crying', text: '' };
+        if (wx) {
+          const t = Math.round(wx.temp);
+          const tone = lockedMode === 'gamer' ? 'calma, tranquila e bem-humorada' : lockedMode === 'focus' ? 'direta e objetiva' : 'sarcástica';
+          const dados = 'local ' + wx.loc + ', temperatura ' + t + ' graus' + (wx.rain !== null ? ', chance de chuva ' + Math.round(wx.rain) + ' por cento' : '');
+          reply = { face: 'smirk', text: 'Em ' + wx.loc + ' faz ' + t + ' graus' + (wx.rain !== null ? ' e ' + Math.round(wx.rain) + '% de chance de chuva' : '') + '. Pronto, virei meteorologista.' };
+          raw = '[smirk] ' + reply.text;
+          try {
+            const raw2 = takeSaves(await chatCall([
+              { role: 'system', content: buildSystem(true, true) }, ...history,
+              { role: 'user', content: 'Dados reais do clima agora (fonte: serviço meteorológico): ' + dados + '. O usuário perguntou: "' + text + '". ' +
+                'Responda com uma única frase curta, ' + tone + ', comentando esses números reais e citando o local, começando com uma tag de emoção (nunca [weather]) e escrevendo os números por extenso ou como "graus", sem o símbolo °C.' }
+            ], c.signal, 150, 0.9));
+            const r2 = parseReply(raw2);
+            if (r2.text) { reply = r2; raw = raw2.replace(/\[weather[^\]]*\]/gi, ''); }
+          } catch (e) { if (c.signal.aborted) throw e; }
+        } else {
+          reply = { face: 'crying', text: 'Não consegui espiar o céu de ' + city + ' agora. Olhe pela janela, é de graça.' };
+          raw = '[crying] ' + reply.text;
+        }
+      }
+
+      if (!reply.text && reply.act) reply.text = 'Feito.';
+      if (!reply.text) throw new Error('empty');
+      history.push({ role: 'user', content: (usedImage ? '[Imagem capturada] ' : '') + text }, { role: 'assistant', content: raw.replace(/\[(?:weather|search|vision)[^\]]*\]?/gi, '') });
+      if (history.length > 8) history.splice(0, history.length - 8);
+      return reply;
+    } catch (err) {
+      if (timedOut) { const e = new Error('timeout'); e.timeout = true; throw e; }
+      throw err;
+    } finally {
+      clearTimeout(to);
+      if (ctl === c) ctl = null;
+    }
+  }
+
+  function errorMessage(err) {
+    if (err.status === 401 || err.status === 403) return 'Chave da API inválida ou sem permissão.';
+    if (err.status === 429) return 'Limite de uso da API atingido. Tente de novo em instantes.';
+    if (err.status) return 'Erro da API (' + err.status + ').';
+    if (err.timeout) return 'A IA demorou demais para responder.';
+    if (err.name === 'TypeError') return 'Sem conexão com a internet.';
+    return 'Não consegui falar com a IA.';
+  }
+
+  /* ---------- Toque na tela ---------- */
+  let firstTap = true;
+  function onFirstTap() {
+    if (!firstTap) return;
+    firstTap = false;
+    initAudio();   // AudioContext global destravado no primeiro toque
+    // destrava o áudio no Chrome Android com um WAV silencioso
+    player.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+    player.play().catch(() => {});
+    try {
+      const el = document.documentElement;
+      const fs = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (fs) Promise.resolve(fs.call(el)).catch(() => {});
+    } catch (e) {}
+    try {   // iOS exige permissão explícita para os sensores de movimento
+      if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') DeviceOrientationEvent.requestPermission().catch(() => {});
+      if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') DeviceMotionEvent.requestPermission().catch(() => {});
+    } catch (e) {}
+    if (pendingGrumpy && !isSleeping) { const g = pendingGrumpy; pendingGrumpy = null; tapGreeted = true; speak(g); }   // saudação rabugenta no 1º toque
+  }
+
+  document.addEventListener('pointerdown', e => {
+    if (e.target.closest('#bar, #memBtn, #sarcBtn')) return;
+    onFirstTap();
+    if (tapGreeted) { tapGreeted = false; return; }   // este toque só disparou a saudação
+    if (isSleeping) { wakeUp(); return; }   // toque na tela acorda
+    if (phase === 'listening' && rec) { try { rec.stop(); } catch (err) {} return; } // encerra a captura
+    if (phase === 'speaking' || phase === 'hold') {   // corte de fala: para a voz na hora e já escuta
+      if (pendingSleep) { enterSleep(); return; }     // cortou a despedida de "vai dormir": dorme já
+      try { player.pause(); } catch (err) {}
+      stopAll(); talking = false; setMode(restMode()); caption('');
+    }
+    startListening();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { stopAll(); phase = 'idle'; talking = false; setMode(restMode()); }
+    else { if (actx && actx.state === 'suspended') actx.resume().catch(() => {}); if (autoOn) acquireWake(); scheduleResume(); }
+  });
+
+  /* ---------- Sensores: giroscópio, acelerômetro e bateria ---------- */
+  const pick = a => a[(Math.random() * a.length) | 0];
+  const LINES = {
+    shake: [['Ei, com mais cuidado, por favor.', 'Opa, sem chacoalhar, por gentileza.'],
+            ['Uau, que delicadeza. Quer que eu devolva o café também?', 'Sou um robô, não um pandeiro, tá?', 'Chacoalha mais, quem sabe eu viro um globo de neve.']],
+    down:  [['Está escuro aqui. Pode virar o celular, por favor?'],
+            ['Ótimo, agora estou de bruços no escuro. Ideia fantástica.', 'Ei! Tá escuro aqui embaixo. Vira esse celular, vai.']],
+    bat:   [['Estou com {p} por cento de bateria. Seria bom me conectar ao carregador.'],
+            ['{p} por cento de bateria. Me liga na tomada antes que eu morra de forma dramática.', 'Estou morrendo de fome elétrica aqui, {p} por cento. Me alimenta.']]
+  };
+  const sayLine = (k, p) => pick(LINES[k][sarcasmLevel <= 30 ? 0 : 1]).replace('{p}', p == null ? '' : p);
+
+  function trySpeak(reply) {   // só fala se o áudio já foi destravado e o Jarvis está livre
+    if (firstTap || isSleeping) return false;
+    if (phase !== 'idle' && phase !== 'hold') return false;
+    clearTimeout(holdTimer);
+    speak(reply);
+    return true;
+  }
+
+  let nextGrumble = 0, nextShake = 0, lastAcc = null;
+  function onFaceDown(down) {
+    if (down === faceDown) return;
+    faceDown = down;
+    settleFace();
+    if (down && !isSleeping && Date.now() >= nextGrumble && trySpeak({ face: 'idle', text: sayLine('down') })) nextGrumble = Date.now() + 15000;
+  }
+  try {
+    window.addEventListener('deviceorientation', e => {
+      if (e.beta == null && e.gamma == null) return;
+      const g = e.gamma || 0, b = e.beta || 0;
+      gTx = Math.max(-1, Math.min(1, g / 40)) * 18;
+      gTy = Math.max(-1, Math.min(1, (b - 60) / 40)) * 18;
+      onFaceDown(Math.abs(b) > 155);
+    }, true);
+  } catch (e) {}
+
+  function onShake() {
+    nextShake = Date.now() + 8000;
+    if (isSleeping) return;
+    shakeUntil = Date.now() + 2000;
+    clearTimeout(shakeTimer);
+    shakeTimer = setTimeout(() => { shakeUntil = 0; settleFace(); }, 2000);
+    if (phase !== 'listening' && phase !== 'thinking' && phase !== 'manual') setMode('glitch');
+    playGlitchSound();
+    trySpeak({ face: 'idle', text: sayLine('shake') });
+  }
+  try {
+    window.addEventListener('devicemotion', e => {
+      const a = e.accelerationIncludingGravity;
+      if (!a || a.x == null) return;
+      if (lastAcc && Date.now() >= nextShake && Math.hypot(a.x - lastAcc.x, a.y - lastAcc.y, a.z - lastAcc.z) > 18) onShake();
+      lastAcc = { x: a.x, y: a.y, z: a.z };
+    }, true);
+  } catch (e) {}
+
+  function updBat(b) {
+    batInfo = { pct: Math.round(b.level * 100), chg: !!b.charging };
+    batLow = b.level <= 0.20 && !b.charging;   // brilho dos olhos pela metade até ligar o carregador
+    if (batLow && !batWarned) {
+      batWarned = true;   // aviso único na sessão
+      const reply = { face: 'crying', text: sayLine('bat', batInfo.pct) };
+      if (!trySpeak(reply)) notify(reply.text, 6000);
+    }
+    renderHud();
+  }
+  try {
+    if (navigator.getBattery) navigator.getBattery().then(b => {
+      updBat(b);
+      b.addEventListener('levelchange', () => updBat(b));
+      b.addEventListener('chargingchange', () => updBat(b));
+    }).catch(() => {});
+  } catch (e) {}
+
+  triggerGrumpyWakeUp();   // abriu/recarregou a página: 3 s de mau humor (a fala sai no primeiro toque)
+
+  requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
+})();
+</script>
+</body>
+</html>
