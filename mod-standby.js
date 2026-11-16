@@ -38,7 +38,9 @@
 
   /* ------------------------------ HELPERS DOM ----------------------------- */
   function getSleepBtn() {
-    return document.querySelector('#modeBar button[data-act="sleep"]');
+    return document.querySelector('#modeBar button[data-act="sleep"]') ||
+           document.querySelector('button[data-act="sleep"]') ||
+           document.querySelector('[data-act="sleep"]');
   }
   function isSleeping() {
     var b = getSleepBtn();
@@ -206,7 +208,9 @@
       waveBtn = document.getElementById('btnWaveSensor');
       return true;
     }
-    var row = document.querySelector('#controls .row');
+    var row = document.querySelector('#controls .row') ||
+              document.querySelector('#controls') ||
+              (getSleepBtn() && getSleepBtn().parentNode);
     if (!row) return false;
     waveBtn = document.createElement('button');
     waveBtn.id = 'btnWaveSensor';
@@ -266,7 +270,27 @@
   });
 
   /* ============================== INICIALIZAÇÃO ============================ */
+  function toast(msg) {
+    var t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;left:50%;top:40px;transform:translateX(-50%);' +
+      'background:#000c;color:#00F0FF;border:1px solid #00F0FF;padding:6px 12px;' +
+      'border-radius:8px;font:12px monospace;z-index:99999;pointer-events:none;';
+    document.body.appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 4000);
+  }
+
   function init() {
+    console.log('[mod-standby] carregado');
+    setTimeout(function () {
+      var falta = [];
+      if (!getSleepBtn()) falta.push('botão sleep');
+      if (!document.getElementById('btnWaveSensor')) falta.push('botão Mão');
+      if (!document.getElementById('hud')) falta.push('#hud');
+      if (!document.getElementById('controls')) falta.push('#controls');
+      toast(falta.length ? 'mod-standby: não achei ' + falta.join(', ')
+                         : 'mod-standby ativo ✔');
+    }, 1500);
     // Botão de mão (tenta de novo se a .row ainda não existir)
     var tries = 0;
     (function tryInject() {
