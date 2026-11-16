@@ -1,14 +1,10 @@
 /* ==========================================================================
-   mod-standby.js  |  JARVIS v1.9
+   mod-standby.js  |  JARVIS v1.9 (Adaptado ao DOM real do index.html)
    Módulo autônomo: auto-sleep, LED de descanso e despertar por gesto.
-   Não depende de variáveis internas do index.html (IIFE fechada):
-   todo o estado é lido/controlado pelo DOM real.
-   Carregar antes de </body>:  <script src="mod-standby.js"></script>
    ========================================================================== */
 (function () {
   'use strict';
 
-  // Evita carregar o módulo duas vezes
   if (window.__jarvisStandbyLoaded) return;
   window.__jarvisStandbyLoaded = true;
 
@@ -25,34 +21,40 @@
   var waveSensorEnabled = false;
   var wasSleeping = false;
   var inactivityTimer = null;
-  var startTimer = null;           // timeout de 1.5s para ligar a câmera
-  var frameTimer = null;           // intervalo de análise
-  var stream = null;               // MediaStream ativo
-  var video = null;                // <video> oculto
-  var canvas = null, ctx = null;   // canvas oculto 32x24
-  var prevLum = null;              // frame anterior (null = calibração)
-  var starting = false;            // evita getUserMedia concorrente
+  var startTimer = null;
+  var frameTimer = null;
+  var stream = null;
+  var video = null;
+  var canvas = null, ctx = null;
+  var prevLum = null;
+  var starting = false;
   var waveBtn = null;
 
   try { waveSensorEnabled = localStorage.getItem(LS_KEY) === 'true'; } catch (e) {}
 
   /* ------------------------------ HELPERS DOM ----------------------------- */
   function getSleepBtn() {
-    return document.querySelector('#modeBar button[data-act="sleep"]') ||
-           document.querySelector('button[data-act="sleep"]') ||
-           document.querySelector('[data-act="sleep"]');
+    var btns = document.querySelectorAll('#bar button');
+    for (var i = 0; i < btns.length; i++) {
+      if (btns[i].textContent.trim().toLowerCase() === 'dormir') return btns[i];
+    }
+    return null;
   }
+
   function isSleeping() {
     var b = getSleepBtn();
     return !!(b && b.classList.contains('on'));
   }
+
   function isTimerActive() {
-    var t = document.getElementById('hudTimer');
-    return !!(t && t.style.display !== 'none');
+    var hudR = document.getElementById('hudR');
+    if (!hudR) return false;
+    var txt = hudR.textContent || '';
+    return txt.indexOf('TIMER ') !== -1 || txt.indexOf('FOCO ') !== -1;
   }
 
   /* ========================================================================
-     2. LED DE DESCANSO + MODO REPOUSO VISUAL (CSS e elemento)
+     LED DE DESCANSO + MODO REPOUSO VISUAL
      ======================================================================== */
   var style = document.createElement('style');
   style.textContent =
@@ -63,8 +65,7 @@
     '#standbyLed{position:fixed;top:12px;right:12px;width:8px;height:8px;' +
       'border-radius:50%;background:#00F0FF;z-index:20;pointer-events:none;' +
       'display:none;animation:jarvisStandbyPulse 3s ease-in-out infinite;}' +
-    '#hud,#controls{transition:opacity .6s ease;}' +
-    '#btnWaveSensor{cursor:pointer;}';
+    '#hudL,#hudR,#bar{transition:opacity .6s ease;}';
   document.head.appendChild(style);
 
   var led = document.createElement('div');
@@ -73,17 +74,17 @@
 
   function setDim(dim) {
     var v = dim ? '0.25' : '1';
-    var hud = document.getElementById('hud');
-    var ctl = document.getElementById('controls');
-    if (hud) hud.style.opacity = v;
-    if (ctl) ctl.style.opacity = v;
+    var hl = document.getElementById('hudL');
+    var hr = document.getElementById('hudR');
+    var bar = document.getElementById('bar');
+    if (hl) hl.style.opacity = v;
+    if (hr) hr.style.opacity = v;
+    if (bar) bar.style.opacity = v;
   }
 
   /* ========================================================================
-     3. WAVE-TO-WAKE (câmera 100% local, nenhum frame sai do aparelho)
+     WAVE-TO-WAKE (câmera frontal local 32x24)
      ======================================================================== */
-
-  // Para a câmera e limpa todos os timers/recursos do sensor
   function stopCamera() {
     if (startTimer) { clearTimeout(startTimer); startTimer = null; }
     if (frameTimer) { clearInterval(frameTimer); frameTimer = null; }
@@ -98,7 +99,6 @@
     starting = false;
   }
 
-  // Onda circular ciano expandindo no centro da tela (500ms)
   function showWaveEffect() {
     var w = document.createElement('div');
     w.style.cssText =
@@ -116,18 +116,17 @@
       );
       a.onfinish = done;
     }
-    setTimeout(done, 600); // garantia de limpeza
+    setTimeout(done, 600);
   }
 
-  // Detecção de movimento detectada -> acorda o Jarvis
   function onWaveDetected() {
     stopCamera();
     showWaveEffect();
     var b = getSleepBtn();
-    if (b) b.click(); else document.body.click();
+    if (b) b.click();
+    else document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
   }
 
-  // Analisa um frame: diferença média absoluta de luminância (R+G+B)
   function analyzeFrame() {
     if (!stream || !video || video.readyState < 2) return;
     if (!isSleeping()) { stopCamera(); return; }
@@ -139,13 +138,13 @@
       for (var i = 0, p = 0; i < n; i++, p += 4) {
         cur[i] = d[p] + d[p + 1] + d[p + 2];
       }
-      if (prevLum) { // primeiro frame é só calibração
+      if (prevLum) {
         var sum = 0;
         for (var j = 0; j < n; j++) sum += Math.abs(cur[j] - prevLum[j]);
         if (sum / n > WAVE_THRESHOLD) { onWaveDetected(); return; }
       }
       prevLum = cur;
-    } catch (e) { /* frame inválido: ignora */ }
+    } catch (e) {}
   }
 
   function startCamera() {
@@ -158,7 +157,6 @@
       video: { facingMode: 'user', width: 64, height: 48 },
       audio: false
     }).then(function (s) {
-      // Estado pode ter mudado enquanto o usuário aceitava a permissão
       if (!waveSensorEnabled || !isSleeping()) {
         s.getTracks().forEach(function (t) { t.stop(); });
         starting = false;
@@ -185,11 +183,10 @@
       prevLum = null;
       frameTimer = setInterval(analyzeFrame, FRAME_INTERVAL);
     }).catch(function () {
-      starting = false; // permissão negada ou sem câmera
+      starting = false;
     });
   }
 
-  // Agenda o início da câmera 1.5s após entrar em repouso
   function scheduleCamera() {
     if (startTimer) clearTimeout(startTimer);
     startTimer = setTimeout(function () {
@@ -198,9 +195,11 @@
     }, WAVE_START_DELAY);
   }
 
-  /* ---- Botão "Mão: ON/OFF" na primeira .row de #controls ---- */
+  /* ---- Botão "Mão: ON/OFF" dentro de #bar ---- */
   function updateWaveBtnLabel() {
-    if (waveBtn) waveBtn.textContent = 'Mão: ' + (waveSensorEnabled ? 'ON' : 'OFF');
+    if (!waveBtn) return;
+    waveBtn.textContent = 'Mão: ' + (waveSensorEnabled ? 'ON' : 'OFF');
+    waveBtn.classList.toggle('on', waveSensorEnabled);
   }
 
   function injectWaveButton() {
@@ -208,10 +207,8 @@
       waveBtn = document.getElementById('btnWaveSensor');
       return true;
     }
-    var row = document.querySelector('#controls .row') ||
-              document.querySelector('#controls') ||
-              (getSleepBtn() && getSleepBtn().parentNode);
-    if (!row) return false;
+    var bar = document.getElementById('bar');
+    if (!bar) return false;
     waveBtn = document.createElement('button');
     waveBtn.id = 'btnWaveSensor';
     waveBtn.type = 'button';
@@ -221,15 +218,15 @@
       waveSensorEnabled = !waveSensorEnabled;
       try { localStorage.setItem(LS_KEY, String(waveSensorEnabled)); } catch (e) {}
       updateWaveBtnLabel();
-      if (!waveSensorEnabled) stopCamera();        // desligou: para já
-      else if (isSleeping()) scheduleCamera();     // ligou dormindo: inicia
+      if (!waveSensorEnabled) stopCamera();
+      else if (isSleeping()) scheduleCamera();
     });
-    row.appendChild(waveBtn);
+    bar.appendChild(waveBtn);
     return true;
   }
 
   /* ========================================================================
-     Sincronização do estado de sono (LED, dim e câmera)
+     SINCRONIZAÇÃO DE SONO E AUTO-SLEEP
      ======================================================================== */
   function syncSleepState() {
     var sleeping = isSleeping();
@@ -237,27 +234,21 @@
     setDim(sleeping);
 
     if (sleeping && !wasSleeping) {
-      // Acabou de dormir
       if (waveSensorEnabled) scheduleCamera();
     } else if (!sleeping && wasSleeping) {
-      // Acabou de acordar (toque, voz ou gesto): câmera desligada já
       stopCamera();
     } else if (!sleeping) {
-      // Garantia contínua enquanto acordado
       if (stream || startTimer) stopCamera();
     }
     wasSleeping = sleeping;
   }
 
-  /* ========================================================================
-     1. AUTO-SLEEP POR INATIVIDADE
-     ======================================================================== */
   function onInactivityTimeout() {
     var b = getSleepBtn();
     if (b && !b.classList.contains('on') && !isTimerActive()) {
       b.click();
     }
-    resetInactivity(); // rearma para a próxima checagem
+    resetInactivity();
   }
 
   function resetInactivity() {
@@ -270,35 +261,13 @@
   });
 
   /* ============================== INICIALIZAÇÃO ============================ */
-  function toast(msg) {
-    var t = document.createElement('div');
-    t.textContent = msg;
-    t.style.cssText = 'position:fixed;left:50%;top:40px;transform:translateX(-50%);' +
-      'background:#000c;color:#00F0FF;border:1px solid #00F0FF;padding:6px 12px;' +
-      'border-radius:8px;font:12px monospace;z-index:99999;pointer-events:none;';
-    document.body.appendChild(t);
-    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 4000);
-  }
-
   function init() {
-    console.log('[mod-standby] carregado');
-    setTimeout(function () {
-      var falta = [];
-      if (!getSleepBtn()) falta.push('botão sleep');
-      if (!document.getElementById('btnWaveSensor')) falta.push('botão Mão');
-      if (!document.getElementById('hud')) falta.push('#hud');
-      if (!document.getElementById('controls')) falta.push('#controls');
-      toast(falta.length ? 'mod-standby: não achei ' + falta.join(', ')
-                         : 'mod-standby ativo ✔');
-    }, 1500);
-    // Botão de mão (tenta de novo se a .row ainda não existir)
     var tries = 0;
     (function tryInject() {
       if (injectWaveButton() || ++tries > 20) return;
-      setTimeout(tryInject, 500);
+      setTimeout(tryInject, 300);
     })();
 
-    // Observa mudanças no texto da legenda -> conta como atividade
     var caption = document.getElementById('caption');
     if (caption) {
       new MutationObserver(resetInactivity).observe(caption, {
@@ -306,7 +275,6 @@
       });
     }
 
-    // Observa a classe do botão de dormir + checagem periódica
     var sb = getSleepBtn();
     if (sb) {
       new MutationObserver(syncSleepState).observe(sb, {
@@ -315,7 +283,6 @@
     }
     setInterval(syncSleepState, STATE_POLL_MS);
 
-    // Segurança: página oculta -> libera a câmera
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) stopCamera();
       else if (waveSensorEnabled && isSleeping()) scheduleCamera();
