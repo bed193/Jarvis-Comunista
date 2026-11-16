@@ -1,33 +1,23 @@
-/* === mod-memoria-tasks.js (v7.0 - Sync Sem Pisca + Injeção Real no /chat) === */
+/* === mod-memoria-tasks.js (v9.0 - Leitura Total + Captura Ampla de Memória & Tarefas) === */
 (function () {
-  if (window.__jarvisMemTasksV7) return;
-  window.__jarvisMemTasksV7 = true;
+  if (window.__jarvisMemTasksV9) return;
+  window.__jarvisMemTasksV9 = true;
 
   const MEM_KEY = 'jarvis_memories';
   const TASK_KEY = 'jarvis_tasks';
 
-  function getMem() {
+  function getList(key) {
     try {
-      const d = JSON.parse(localStorage.getItem(MEM_KEY) || '[]');
+      const d = JSON.parse(localStorage.getItem(key) || '[]');
       return Array.isArray(d) ? d : [];
     } catch { return []; }
   }
 
-  function saveMem(arr) {
-    localStorage.setItem(MEM_KEY, JSON.stringify(arr.slice(-30)));
-    syncHud();
-  }
-
-  function getTasks() {
+  function setList(key, arr) {
     try {
-      const d = JSON.parse(localStorage.getItem(TASK_KEY) || '[]');
-      return Array.isArray(d) ? d : [];
-    } catch { return []; }
-  }
-
-  function saveTasks(arr) {
-    localStorage.setItem(TASK_KEY, JSON.stringify(arr));
-    syncHud();
+      localStorage.setItem(key, JSON.stringify(arr));
+      syncHud();
+    } catch (e) {}
   }
 
   function showToast(msg) {
@@ -45,118 +35,85 @@
     setTimeout(() => t.remove(), 2600);
   }
 
-  // Sincroniza #hudL instantaneamente via MutationObserver (zero pisca-pisca)
-  let isSyncing = false;
+  // Sincroniza MEM: X e TASKS: X sem piscar
+  let lockingHud = false;
   function syncHud() {
-    if (isSyncing) return;
+    if (lockingHud) return;
     const hudL = document.getElementById('hudL');
     if (!hudL) return;
 
-    const mCount = getMem().length;
-    const tCount = getTasks().length;
+    const m = getList(MEM_KEY).length;
+    const t = getList(TASK_KEY).length;
     const cur = hudL.innerHTML;
     const next = cur
-      .replace(/MEM:\s*\d+/i, `MEM: ${mCount}`)
-      .replace(/TASKS:\s*\d+/i, `TASKS: ${tCount}`);
+      .replace(/MEM:\s*\d+/i, `MEM: ${m}`)
+      .replace(/TASKS:\s*\d+/i, `TASKS: ${t}`);
 
     if (next !== cur) {
-      isSyncing = true;
+      lockingHud = true;
       hudL.innerHTML = next;
-      isSyncing = false;
+      lockingHud = false;
     }
   }
 
-  // Captura direta pela fala do usuário (garantia dupla)
-  function captureFromUserText(txt) {
+  // Detector natural amplo (garante salvamento mesmo se a IA esquecer a tag)
+  function captureFromUser(txt) {
     if (!txt || typeof txt !== 'string') return;
     const clean = txt.trim();
 
-    // 1. Concluir tarefa/atividade
+    // 1. Concluir tarefa
     const doneMatch = clean.match(
-      /(?:conclu[íi]|terminei|j[áa]\s+fiz|finalizei|fechei)\s+(?:a\s+(?:tarefa|atividade)\s+|o\s+compromisso\s+)?(.+)/i
+      /(?:conclu[íi]|terminei|j[áa]\s+fiz|finalizei|fechei|risc[ae])\s+(?:a\s+(?:tarefa|atividade)\s+|o\s+compromisso\s+)?(.+)/i
     );
     if (doneMatch && doneMatch[1].length > 2) {
       const key = doneMatch[1].replace(/[.!?]+$/, '').trim().toLowerCase();
-      let tasks = getTasks();
-      const before = tasks.length;
-      tasks = tasks.filter(t => !t.toLowerCase().includes(key));
-      if (tasks.length < before) {
-        saveTasks(tasks);
-        showToast('✅ Atividade concluída!');
+      const tasks = getList(TASK_KEY);
+      const filtered = tasks.filter(t => !t.toLowerCase().includes(key));
+      if (filtered.length < tasks.length) {
+        setList(TASK_KEY, filtered);
+        showToast('✅ Tarefa concluída!');
       }
       return;
     }
 
-    // 2. Adicionar tarefa/atividade
+    // 2. Adicionar tarefa / atividade / plano
     const taskMatch = clean.match(
       /(?:anot[ae]\s+(?:a[íi]\s+)?(?:para\s+eu\s+|que\s+eu\s+tenho\s+que\s+|a\s+tarefa\s+|a\s+atividade\s+)?|adicion[ae]\s+(?:na\s+lista\s+|a\s+tarefa\s+|a\s+atividade\s+)?|coloc[ae]\s+(?:na\s+(?:minha\s+)?lista|nas\s+tarefas|nas\s+atividades)\s*:?\s*|me\s+lembr[ae]\s+de\s+|n[ãa]o\s+me\s+deixa\s+esquecer\s+de\s+|nova\s+(?:tarefa|atividade)\s*:?\s*|tenho\s+que\s+fazer\s+|preciso\s+fazer\s+)(.+)/i
     );
     if (taskMatch && taskMatch[1].length > 2) {
       const desc = taskMatch[1].replace(/[.!?]+$/, '').trim();
-      const tasks = getTasks();
+      const tasks = getList(TASK_KEY);
       if (!tasks.some(x => x.toLowerCase() === desc.toLowerCase())) {
         tasks.push(desc);
-        saveTasks(tasks);
-        showToast(`📌 Atividade: ${desc}`);
+        setList(TASK_KEY, tasks);
+        showToast(`📌 Salvo: ${desc}`);
       }
       return;
     }
 
-    // 3. Salvar fato na memória
+    // 3. Salvar fato na memória (gatilhos naturais amplos)
     const memMatch = clean.match(
-      /(?:lembr[ae]\s+que|guard[ae]\s+(?:na\s+mem[óo]ria\s+)?que|salv[ae]\s+(?:na\s+mem[óo]ria\s+)?que|memoriz[ae]\s+que|meu\s+nome\s+[ée])\s+(.+)/i
+      /(?:lembr[ae]\s+que|guard[ae]\s+(?:na\s+mem[óo]ria\s+)?(?:que|isso)?\s*:?\s*|salv[ae]\s+(?:na\s+mem[óo]ria\s+)?(?:que|isso)?\s*:?\s*|memoriz[ae]\s+(?:que|isso)?\s*:?\s*|n[ãa]o\s+esquec[ae]\s+que|meu\s+nome\s+[ée]|eu\s+gosto\s+de|eu\s+moro\s+em|eu\s+trabalho\s+com|eu\s+estudo\s+)(.+)/i
     );
     if (memMatch && memMatch[1].length > 2) {
-      const fato = clean.match(/meu\s+nome\s+[ée]/i)
-        ? `Nome do usuário: ${memMatch[1].replace(/[.!?]+$/, '').trim()}`
-        : memMatch[1].replace(/[.!?]+$/, '').trim();
-      const mems = getMem();
+      let fato = memMatch[1].replace(/[.!?]+$/, '').trim();
+      if (/meu\s+nome\s+[ée]/i.test(clean)) fato = `Nome do usuário: ${fato}`;
+      else if (/eu\s+gosto\s+de/i.test(clean)) fato = `Gosta de ${fato}`;
+      else if (/eu\s+moro\s+em/i.test(clean)) fato = `Mora em ${fato}`;
+      else if (/eu\s+trabalho\s+com/i.test(clean)) fato = `Trabalha com ${fato}`;
+      else if (/eu\s+estudo/i.test(clean)) fato = `Estuda ${fato}`;
+
+      const mems = getList(MEM_KEY);
       if (!mems.some(x => x.toLowerCase() === fato.toLowerCase())) {
         mems.push(fato);
-        saveMem(mems);
+        setList(MEM_KEY, mems.slice(-30));
         showToast(`💾 Memória: ${fato}`);
       }
     }
   }
 
-  // Processa tags retornadas pela IA
-  function processAITags(raw) {
-    if (!raw || typeof raw !== 'string') return;
-
-    for (const m of raw.matchAll(/\[save:\s*([^\]]+)\]/gi)) {
-      const fato = m[1].trim();
-      const mems = getMem();
-      if (fato && !mems.some(x => x.toLowerCase() === fato.toLowerCase())) {
-        mems.push(fato);
-        saveMem(mems);
-        showToast(`💾 Memória: ${fato}`);
-      }
-    }
-
-    for (const m of raw.matchAll(/\[task_add:\s*([^\]]+)\]/gi)) {
-      const desc = m[1].trim();
-      const tasks = getTasks();
-      if (desc && !tasks.some(x => x.toLowerCase() === desc.toLowerCase())) {
-        tasks.push(desc);
-        saveTasks(tasks);
-        showToast(`📌 Atividade: ${desc}`);
-      }
-    }
-
-    for (const m of raw.matchAll(/\[task_done:\s*([^\]]+)\]/gi)) {
-      const key = m[1].trim().toLowerCase();
-      let tasks = getTasks();
-      const before = tasks.length;
-      tasks = tasks.filter(t => !t.toLowerCase().includes(key));
-      if (tasks.length < before) {
-        saveTasks(tasks);
-        showToast('✅ Atividade concluída!');
-      }
-    }
-  }
-
-  // Intercepta /chat de forma segura sem quebrar Request nem stream
-  const origFetch = window.fetch;
+  // Intercepta /chat para injetar TODAS as memórias e tarefas reais na IA
+  const _fetch = window.fetch;
   window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
 
@@ -166,122 +123,86 @@
         if (Array.isArray(body.messages)) {
           const lastUser = [...body.messages].reverse().find(m => m.role === 'user');
           if (lastUser) {
-            const userStr = typeof lastUser.content === 'string'
+            const uTxt = typeof lastUser.content === 'string'
               ? lastUser.content
               : (Array.isArray(lastUser.content) ? (lastUser.content.find(c => c.type === 'text')?.text || '') : '');
-            captureFromUserText(userStr);
+            captureFromUser(uTxt);
           }
 
-          const mems = getMem();
-          const tasks = getTasks();
-          const contextBlock =
-            `\n[DADOS REAIS DO SISTEMA - LEIA COM ATENÇÃO]\n` +
-            `- Memórias salvas sobre o usuário (${mems.length}): ${mems.length ? mems.join(' | ') : 'NENHUMA'}.\n` +
-            `- Tarefas/Atividades pendentes (${tasks.length}): ${tasks.length ? tasks.map((t, i) => `${i + 1}. ${t}`).join(' | ') : 'NENHUMA'}.\n` +
-            `REGRAS OBRIGATÓRIAS:\n` +
-            `1) Quando perguntarem quais tarefas ou memórias existem, responda APENAS com base nas listas acima. NUNCA invente tarefas.\n` +
-            `2) Se o usuário pedir para lembrar/guardar algo ou informar nome/gosto, inclua no final: [save: fato curto].\n` +
-            `3) Se o usuário pedir para anotar/adicionar tarefa ou atividade, inclua no final: [task_add: descrição curta].\n` +
-            `4) Se o usuário concluir uma tarefa, inclua no final: [task_done: palavra-chave].\n`;
+          const mems = getList(MEM_KEY);
+          const tasks = getList(TASK_KEY);
+
+          const contextoReal =
+            `\n[BANCO DE DADOS REAL DO USUÁRIO - LEITURA OBRIGATÓRIA]\n` +
+            `1. MEMÓRIAS SALVAS (${mems.length} itens): ${mems.length ? mems.map((m, i) => `(${i + 1}) ${m}`).join('; ') : 'Nenhuma memória salva'}.\n` +
+            `2. TAREFAS / ATIVIDADES / PLANOS PENDENTES (${tasks.length} itens): ${tasks.length ? tasks.map((t, i) => `(${i + 1}) ${t}`).join('; ') : 'Nenhuma tarefa pendente'}.\n` +
+            `INSTRUÇÕES OBRIGATÓRIAS:\n` +
+            `- Se o usuário perguntar quais são as tarefas, atividades, pendências ou planos do dia, liste TODOS os ${tasks.length} itens acima sem omitir nenhum. Se estiver vazio, diga que não há tarefas pendentes.\n` +
+            `- Se o usuário perguntar o que tem na sua memória ou o que você sabe sobre ele, cite TODOS os ${mems.length} itens da lista de memórias acima, sem esconder nenhum.\n` +
+            `- Sempre que o usuário contar qualquer informação pessoal, preferência, rotina, nome, projeto ou pedir para lembrar/guardar algo, adicione no final da resposta: [save: fato curto e objetivo].\n` +
+            `- Sempre que o usuário pedir para anotar uma tarefa, plano, lembrete ou atividade, adicione no final: [task_add: descrição curta]. Ao concluir, adicione: [task_done: palavra-chave].\n`;
 
           const sys = body.messages.find(m => m.role === 'system');
           if (sys && typeof sys.content === 'string') {
-            sys.content += contextBlock;
+            sys.content += contextoReal;
           } else {
-            body.messages.unshift({ role: 'system', content: contextBlock });
+            body.messages.unshift({ role: 'system', content: contextoReal });
           }
           init.body = JSON.stringify(body);
         }
       } catch (e) {}
     }
 
-    const res = await origFetch.apply(this, arguments);
+    const res = await _fetch.apply(this, arguments);
 
     if (url.includes('/chat')) {
       try {
         const data = await res.clone().json();
         const reply = data?.choices?.[0]?.message?.content || data?.reply || data?.text || '';
-        processAITags(reply);
+
+        for (const m of reply.matchAll(/\[save:\s*([^\]]+)\]/gi)) {
+          const fato = m[1].trim();
+          const mems = getList(MEM_KEY);
+          if (fato && !mems.some(x => x.toLowerCase() === fato.toLowerCase())) {
+            mems.push(fato);
+            setList(MEM_KEY, mems.slice(-30));
+            showToast(`💾 Memória: ${fato}`);
+          }
+        }
+
+        for (const m of reply.matchAll(/\[task_add:\s*([^\]]+)\]/gi)) {
+          const desc = m[1].trim();
+          const tasks = getList(TASK_KEY);
+          if (desc && !tasks.some(x => x.toLowerCase() === desc.toLowerCase())) {
+            tasks.push(desc);
+            setList(TASK_KEY, tasks);
+            showToast(`📌 Salvo: ${desc}`);
+          }
+        }
+
+        for (const m of reply.matchAll(/\[task_done:\s*([^\]]+)\]/gi)) {
+          const key = m[1].trim().toLowerCase();
+          const tasks = getList(TASK_KEY);
+          const filtered = tasks.filter(t => !t.toLowerCase().includes(key));
+          if (filtered.length < tasks.length) {
+            setList(TASK_KEY, filtered);
+            showToast('✅ Tarefa concluída!');
+          }
+        }
+
+        setTimeout(syncHud, 120);
       } catch (e) {}
     }
 
     return res;
   };
 
-  // Modal ao tocar em TASKS
-  function openTasksModal() {
-    const old = document.getElementById('jarvisTasksModal');
-    if (old) { old.remove(); return; }
-
-    const modal = document.createElement('div');
-    modal.id = 'jarvisTasksModal';
-    modal.style.cssText =
-      'position:fixed;top:64px;left:12px;width:275px;background:rgba(8,12,20,0.96);' +
-      'border:1px solid #00F0FF;border-radius:8px;padding:12px;z-index:9999;' +
-      'color:#E2E8F0;font-family:monospace;font-size:12px;box-shadow:0 0 18px rgba(0,240,255,0.3);';
-
-    function render() {
-      const tasks = getTasks();
-      const mems = getMem();
-      modal.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;border-bottom:1px solid rgba(0,240,255,0.3);padding-bottom:4px;">
-          <strong style="color:#00F0FF;">ATIVIDADES (${tasks.length}) | MEM (${mems.length})</strong>
-          <button id="closeJTask" style="background:none;border:none;color:#FF1E56;font-weight:bold;cursor:pointer;font-size:14px;">✕</button>
-        </div>
-        <div style="max-height:130px;overflow-y:auto;margin-bottom:8px;">
-          ${tasks.length ? tasks.map((t, i) => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
-              <span>• ${t}</span>
-              <button data-del="${i}" style="background:rgba(57,255,20,0.15);border:1px solid #39FF14;color:#39FF14;border-radius:4px;padding:1px 6px;cursor:pointer;">✓</button>
-            </div>
-          `).join('') : '<div style="opacity:0.6;">Nenhuma atividade pendente.</div>'}
-        </div>
-        <div style="display:flex;gap:4px;">
-          <input id="newJTaskInp" placeholder="Nova atividade..." style="flex:1;background:#0f172a;border:1px solid #334155;color:#fff;padding:5px 6px;border-radius:4px;font-size:11px;">
-          <button id="addJTaskBtn" style="background:#00F0FF;color:#000;border:none;border-radius:4px;padding:5px 10px;font-weight:bold;cursor:pointer;">+</button>
-        </div>
-      `;
-      modal.querySelector('#closeJTask').onclick = () => modal.remove();
-      modal.querySelector('#addJTaskBtn').onclick = () => {
-        const inp = modal.querySelector('#newJTaskInp');
-        if (inp.value.trim()) {
-          const list = getTasks();
-          list.push(inp.value.trim());
-          saveTasks(list);
-          render();
-        }
-      };
-      modal.querySelectorAll('[data-del]').forEach(btn => {
-        btn.onclick = () => {
-          const idx = Number(btn.getAttribute('data-del'));
-          const list = getTasks();
-          list.splice(idx, 1);
-          saveTasks(list);
-          render();
-        };
-      });
-    }
-    render();
-    document.body.appendChild(modal);
-  }
-
   setTimeout(() => {
     const hudL = document.getElementById('hudL');
     if (hudL) {
       syncHud();
-      const hudObs = new MutationObserver(() => syncHud());
-      hudObs.observe(hudL, { childList: true, subtree: true, characterData: true });
-    }
-
-    const tasksBtn = document.getElementById('tasksBtn');
-    if (tasksBtn) {
-      tasksBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openTasksModal();
-      });
-    } else if (hudL) {
-      hudL.addEventListener('click', openTasksModal);
+      new MutationObserver(syncHud).observe(hudL, { childList: true, subtree: true, characterData: true });
     }
   }, 400);
 })();
-        
+      
