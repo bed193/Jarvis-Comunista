@@ -1,7 +1,7 @@
-/* === mod-memoria-tasks.js (v4.0 - Sync Instantâneo + Linguagem Natural) === */
+/* === mod-memoria-tasks.js (v5.0 - 100% Nativo, Sem Interceptar Storage) === */
 (function () {
-  if (window.__jarvisMemTasksV4) return;
-  window.__jarvisMemTasksV4 = true;
+  if (window.__jarvisMemTasksV5) return;
+  window.__jarvisMemTasksV5 = true;
 
   const MEM_KEY = 'jarvis_memories';
   const TASK_KEY = 'jarvis_tasks';
@@ -13,8 +13,8 @@
     } catch { return []; }
   }
   function saveMem(arr) {
-    origSetItem.call(localStorage, MEM_KEY, JSON.stringify(arr.slice(-30)));
-    syncHud();
+    localStorage.setItem(MEM_KEY, JSON.stringify(arr.slice(-30)));
+    syncHud(true);
   }
 
   function getTasks() {
@@ -24,8 +24,8 @@
     } catch { return []; }
   }
   function saveTasks(arr) {
-    origSetItem.call(localStorage, TASK_KEY, JSON.stringify(arr));
-    syncHud();
+    localStorage.setItem(TASK_KEY, JSON.stringify(arr));
+    syncHud(true);
   }
 
   function showToast(msg) {
@@ -43,42 +43,34 @@
     setTimeout(() => t.remove(), 2800);
   }
 
-  // Sincroniza MEM: X e TASKS: X no #hudL instantaneamente
-  let syncing = false;
-  function syncHud() {
-    if (syncing) return;
+  // Sincroniza MEM: X e TASKS: X no #hudL com segurança
+  let lastM = -1;
+  let lastT = -1;
+  function syncHud(force) {
     const hudL = document.getElementById('hudL');
     if (!hudL) return;
 
     const mCount = getMem().length;
     const tCount = getTasks().length;
-    const html = hudL.innerHTML;
-    const updated = html
+    if (!force && mCount === lastM && tCount === lastT &&
+        hudL.textContent.includes(`MEM: ${mCount}`) &&
+        hudL.textContent.includes(`TASKS: ${tCount}`)) {
+      return;
+    }
+
+    lastM = mCount;
+    lastT = tCount;
+    hudL.innerHTML = hudL.innerHTML
       .replace(/MEM:\s*\d+/i, `MEM: ${mCount}`)
       .replace(/TASKS:\s*\d+/i, `TASKS: ${tCount}`);
-
-    if (updated !== html) {
-      syncing = true;
-      hudL.innerHTML = updated;
-      syncing = false;
-    }
   }
 
-  // Intercepta localStorage.setItem para atualizar o HUD no milissegundo em que o index.html salvar algo
-  const origSetItem = localStorage.setItem;
-  localStorage.setItem = function (key, value) {
-    origSetItem.apply(this, arguments);
-    if (key === MEM_KEY || key === TASK_KEY) {
-      setTimeout(syncHud, 10);
-    }
-  };
-
-  // Detector de linguagem natural (Tarefas/Atividades vs Memória Pessoal)
+  // Detector natural da fala do usuário
   function parseUserNatural(userText) {
     if (!userText || typeof userText !== 'string') return;
     const clean = userText.trim();
 
-    // 1. Concluir atividade/tarefa
+    // Concluir tarefa/atividade
     const doneMatch = clean.match(
       /(?:conclu[íi]|terminei|j[áa]\s+fiz|finalizei|fechei|marca\s+como\s+feit[oa])\s+(?:a\s+(?:tarefa|atividade)\s+|o\s+compromisso\s+)?(.+)/i
     );
@@ -89,12 +81,12 @@
       tasks = tasks.filter(t => !t.toLowerCase().includes(key));
       if (tasks.length < before) {
         saveTasks(tasks);
-        showToast(`✅ Concluído!`);
+        showToast('✅ Atividade concluída!');
         return;
       }
     }
 
-    // 2. Adicionar tarefa, atividade, compromisso ou lembrete
+    // Adicionar tarefa/atividade
     const taskMatch = clean.match(
       /(?:anot[ae]\s+(?:a[íi]\s+)?(?:para\s+eu\s+|que\s+eu\s+tenho\s+que\s+|a\s+tarefa\s+|a\s+atividade\s+)?|adicion[ae]\s+(?:na\s+lista\s+|a\s+tarefa\s+|a\s+atividade\s+)?|coloc[ae]\s+(?:na\s+(?:minha\s+)?lista|nas\s+tarefas|nas\s+atividades)\s*:?\s*|me\s+lembr[ae]\s+de\s+|n[ãa]o\s+me\s+deixa\s+esquecer\s+de\s+|nova\s+(?:tarefa|atividade)\s*:?\s*|tenho\s+que\s+fazer\s+|preciso\s+fazer\s+)(.+)/i
     );
@@ -109,7 +101,7 @@
       return;
     }
 
-    // 3. Salvar fato/memória pessoal
+    // Salvar fato na memória
     const memMatch = clean.match(
       /(?:lembr[ae]\s+que|guard[ae]\s+(?:na\s+mem[óo]ria\s+)?que|salv[ae]\s+(?:na\s+mem[óo]ria\s+)?que|anot[ae]\s+que)\s+(.+)/i
     );
@@ -124,7 +116,7 @@
     }
   }
 
-  // Processa tags invisíveis retornadas pela IA
+  // Processa tags invisíveis da IA
   function parseAITags(raw) {
     if (!raw || typeof raw !== 'string') return;
 
@@ -164,12 +156,12 @@
       });
       if (tasks.length < before) {
         saveTasks(tasks);
-        showToast(`✅ Concluído!`);
+        showToast('✅ Atividade concluída!');
       }
     }
   }
 
-  // Intercepta window.fetch
+  // Intercepta window.fetch apenas para /chat
   const origFetch = window.fetch;
   window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
@@ -191,8 +183,8 @@
           const extraSys =
             `\n[MEMÓRIA E ATIVIDADES DO USUÁRIO]\n` +
             `Memórias: ${mems.length ? mems.join(' | ') : 'nenhuma'}.\n` +
-            `Atividades/Tarefas: ${tasks.length ? tasks.join(' | ') : 'nenhuma'}.\n` +
-            `IMPORTANTE: Sempre que o usuário pedir para anotar uma atividade, compromisso, lembrete ou tarefa (mesmo sem usar a palavra "tarefa"), inclua no fim da sua resposta: [task_add: descrição curta]. Se concluir algo, inclua: [task_done: palavra-chave]. Se revelar fato pessoal, inclua: [save: fato curto].\n`;
+            `Atividades: ${tasks.length ? tasks.join(' | ') : 'nenhuma'}.\n` +
+            `Sempre que o usuário pedir para anotar uma atividade, compromisso, lembrete ou tarefa, inclua no fim da resposta: [task_add: descrição curta]. Se concluir algo, inclua: [task_done: palavra-chave]. Se revelar fato pessoal, inclua: [save: fato curto].\n`;
 
           const sysMsg = payload.messages.find(m => m.role === 'system');
           if (sysMsg && typeof sysMsg.content === 'string') {
@@ -213,6 +205,7 @@
         const data = await cloned.json();
         const reply = data?.choices?.[0]?.message?.content || data?.reply || data?.text || '';
         parseAITags(reply);
+        setTimeout(() => syncHud(true), 250);
       } catch (e) {}
     }
 
@@ -276,14 +269,8 @@
     document.body.appendChild(modal);
   }
 
-  function initHudObserver() {
+  function initHud() {
     const hudL = document.getElementById('hudL');
-    if (hudL) {
-      syncHud();
-      const obs = new MutationObserver(() => syncHud());
-      obs.observe(hudL, { childList: true, subtree: true, characterData: true });
-    }
-
     const tasksBtn = document.getElementById('tasksBtn');
     if (tasksBtn) {
       tasksBtn.addEventListener('click', (e) => {
@@ -293,6 +280,8 @@
     } else if (hudL) {
       hudL.addEventListener('click', openTasksModal);
     }
+    syncHud(true);
+    setInterval(() => syncHud(false), 800);
   }
 
   function watchWakeUp() {
@@ -318,9 +307,8 @@
   }
 
   setTimeout(() => {
-    initHudObserver();
+    initHud();
     watchWakeUp();
-    syncHud();
   }, 500);
 })();
-          
+      
