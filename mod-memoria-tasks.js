@@ -1,7 +1,7 @@
-/* === mod-memoria-tasks.js (v3.0 - Blindado com Observer + Fallback Direto) === */
+/* === mod-memoria-tasks.js (v4.0 - Sync Instantâneo + Linguagem Natural) === */
 (function () {
-  if (window.__jarvisMemTasksV3) return;
-  window.__jarvisMemTasksV3 = true;
+  if (window.__jarvisMemTasksV4) return;
+  window.__jarvisMemTasksV4 = true;
 
   const MEM_KEY = 'jarvis_memories';
   const TASK_KEY = 'jarvis_tasks';
@@ -13,7 +13,7 @@
     } catch { return []; }
   }
   function saveMem(arr) {
-    localStorage.setItem(MEM_KEY, JSON.stringify(arr.slice(-30)));
+    origSetItem.call(localStorage, MEM_KEY, JSON.stringify(arr.slice(-30)));
     syncHud();
   }
 
@@ -24,7 +24,7 @@
     } catch { return []; }
   }
   function saveTasks(arr) {
-    localStorage.setItem(TASK_KEY, JSON.stringify(arr));
+    origSetItem.call(localStorage, TASK_KEY, JSON.stringify(arr));
     syncHud();
   }
 
@@ -43,7 +43,7 @@
     setTimeout(() => t.remove(), 2800);
   }
 
-  // Sincroniza MEM: X e TASKS: X no #hudL sem entrar em loop infinito
+  // Sincroniza MEM: X e TASKS: X no #hudL instantaneamente
   let syncing = false;
   function syncHud() {
     if (syncing) return;
@@ -64,13 +64,55 @@
     }
   }
 
-  // Fallback direto na fala do usuário (garante funcionamento mesmo se a IA esquecer a tag)
-  function parseUserDirect(userText) {
+  // Intercepta localStorage.setItem para atualizar o HUD no milissegundo em que o index.html salvar algo
+  const origSetItem = localStorage.setItem;
+  localStorage.setItem = function (key, value) {
+    origSetItem.apply(this, arguments);
+    if (key === MEM_KEY || key === TASK_KEY) {
+      setTimeout(syncHud, 10);
+    }
+  };
+
+  // Detector de linguagem natural (Tarefas/Atividades vs Memória Pessoal)
+  function parseUserNatural(userText) {
     if (!userText || typeof userText !== 'string') return;
     const clean = userText.trim();
 
-    // Ex: "lembra que eu gosto de café", "guarda na memória que..."
-    const memMatch = clean.match(/(?:lembr[ae]|guard[ae]\s+na\s+mem[óo]ria|salva\s+na\s+mem[óo]ria|anota\s+que)\s+(?:que\s+)?(.+)/i);
+    // 1. Concluir atividade/tarefa
+    const doneMatch = clean.match(
+      /(?:conclu[íi]|terminei|j[áa]\s+fiz|finalizei|fechei|marca\s+como\s+feit[oa])\s+(?:a\s+(?:tarefa|atividade)\s+|o\s+compromisso\s+)?(.+)/i
+    );
+    if (doneMatch && doneMatch[1].length > 2) {
+      const key = doneMatch[1].replace(/[.!?]+$/, '').trim().toLowerCase();
+      let tasks = getTasks();
+      const before = tasks.length;
+      tasks = tasks.filter(t => !t.toLowerCase().includes(key));
+      if (tasks.length < before) {
+        saveTasks(tasks);
+        showToast(`✅ Concluído!`);
+        return;
+      }
+    }
+
+    // 2. Adicionar tarefa, atividade, compromisso ou lembrete
+    const taskMatch = clean.match(
+      /(?:anot[ae]\s+(?:a[íi]\s+)?(?:para\s+eu\s+|que\s+eu\s+tenho\s+que\s+|a\s+tarefa\s+|a\s+atividade\s+)?|adicion[ae]\s+(?:na\s+lista\s+|a\s+tarefa\s+|a\s+atividade\s+)?|coloc[ae]\s+(?:na\s+(?:minha\s+)?lista|nas\s+tarefas|nas\s+atividades)\s*:?\s*|me\s+lembr[ae]\s+de\s+|n[ãa]o\s+me\s+deixa\s+esquecer\s+de\s+|nova\s+(?:tarefa|atividade)\s*:?\s*|tenho\s+que\s+fazer\s+|preciso\s+fazer\s+)(.+)/i
+    );
+    if (taskMatch && taskMatch[1].length > 2) {
+      const desc = taskMatch[1].replace(/[.!?]+$/, '').trim();
+      const tasks = getTasks();
+      if (!tasks.some(x => x.toLowerCase() === desc.toLowerCase())) {
+        tasks.push(desc);
+        saveTasks(tasks);
+        showToast(`📌 Atividade: ${desc}`);
+      }
+      return;
+    }
+
+    // 3. Salvar fato/memória pessoal
+    const memMatch = clean.match(
+      /(?:lembr[ae]\s+que|guard[ae]\s+(?:na\s+mem[óo]ria\s+)?que|salv[ae]\s+(?:na\s+mem[óo]ria\s+)?que|anot[ae]\s+que)\s+(.+)/i
+    );
     if (memMatch && memMatch[1].length > 3) {
       const fato = memMatch[1].replace(/[.!?]+$/, '').trim();
       const mems = getMem();
@@ -80,34 +122,9 @@
         showToast(`💾 Memória: ${fato}`);
       }
     }
-
-    // Ex: "anota a tarefa comprar cabo", "adiciona tarefa estudar", "cria um lembrete..."
-    const taskMatch = clean.match(/(?:anot[ae]\s+(?:a\s+)?tarefa|adicion[ae]\s+(?:a\s+)?tarefa|nova\s+tarefa|coloca\s+nas\s+tarefas|lembrete\s+de)\s*:?\s*(.+)/i);
-    if (taskMatch && taskMatch[1].length > 2) {
-      const desc = taskMatch[1].replace(/[.!?]+$/, '').trim();
-      const tasks = getTasks();
-      if (!tasks.some(x => x.toLowerCase() === desc.toLowerCase())) {
-        tasks.push(desc);
-        saveTasks(tasks);
-        showToast(`📌 Tarefa: ${desc}`);
-      }
-    }
-
-    // Ex: "concluí a tarefa...", "já fiz a tarefa..."
-    const doneMatch = clean.match(/(?:conclu[íi]|terminei|j[áa]\s+fiz|marca\s+como\s+feita)\s+(?:a\s+tarefa\s+)?(.+)/i);
-    if (doneMatch && doneMatch[1].length > 2) {
-      const key = doneMatch[1].replace(/[.!?]+$/, '').trim().toLowerCase();
-      let tasks = getTasks();
-      const before = tasks.length;
-      tasks = tasks.filter(t => !t.toLowerCase().includes(key));
-      if (tasks.length < before) {
-        saveTasks(tasks);
-        showToast(`✅ Tarefa concluída!`);
-      }
-    }
   }
 
-  // Processa tags invisíveis da IA
+  // Processa tags invisíveis retornadas pela IA
   function parseAITags(raw) {
     if (!raw || typeof raw !== 'string') return;
 
@@ -131,7 +148,7 @@
         const desc = m[1].trim();
         if (desc && !tasks.some(x => x.toLowerCase() === desc.toLowerCase())) {
           tasks.push(desc);
-          showToast(`📌 Tarefa: ${desc}`);
+          showToast(`📌 Atividade: ${desc}`);
         }
       });
       saveTasks(tasks);
@@ -147,7 +164,7 @@
       });
       if (tasks.length < before) {
         saveTasks(tasks);
-        showToast(`✅ Tarefa concluída!`);
+        showToast(`✅ Concluído!`);
       }
     }
   }
@@ -161,22 +178,21 @@
       try {
         const payload = JSON.parse(init.body);
         if (Array.isArray(payload.messages)) {
-          // Lê última mensagem do usuário para fallback direto
           const lastUser = [...payload.messages].reverse().find(m => m.role === 'user');
           if (lastUser) {
             const txt = typeof lastUser.content === 'string'
               ? lastUser.content
               : (Array.isArray(lastUser.content) ? (lastUser.content.find(c => c.type === 'text')?.text || '') : '');
-            parseUserDirect(txt);
+            parseUserNatural(txt);
           }
 
           const mems = getMem();
           const tasks = getTasks();
           const extraSys =
-            `\n[MEMÓRIA E TAREFAS DO USUÁRIO]\n` +
+            `\n[MEMÓRIA E ATIVIDADES DO USUÁRIO]\n` +
             `Memórias: ${mems.length ? mems.join(' | ') : 'nenhuma'}.\n` +
-            `Tarefas: ${tasks.length ? tasks.join(' | ') : 'nenhuma'}.\n` +
-            `Tags opcionais no fim da resposta: [save: fato], [task_add: tarefa], [task_done: chave].\n`;
+            `Atividades/Tarefas: ${tasks.length ? tasks.join(' | ') : 'nenhuma'}.\n` +
+            `IMPORTANTE: Sempre que o usuário pedir para anotar uma atividade, compromisso, lembrete ou tarefa (mesmo sem usar a palavra "tarefa"), inclua no fim da sua resposta: [task_add: descrição curta]. Se concluir algo, inclua: [task_done: palavra-chave]. Se revelar fato pessoal, inclua: [save: fato curto].\n`;
 
           const sysMsg = payload.messages.find(m => m.role === 'system');
           if (sysMsg && typeof sysMsg.content === 'string') {
@@ -203,7 +219,7 @@
     return response;
   };
 
-  // Modal de Tarefas e Memórias ao tocar em TASKS no HUD
+  // Modal gerenciável ao tocar em TASKS no HUD
   function openTasksModal() {
     const old = document.getElementById('jarvisTasksModal');
     if (old) { old.remove(); return; }
@@ -220,7 +236,7 @@
       const mems = getMem();
       modal.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;border-bottom:1px solid rgba(0,240,255,0.3);padding-bottom:4px;">
-          <strong style="color:#00F0FF;">TASKS (${tasks.length}) | MEM (${mems.length})</strong>
+          <strong style="color:#00F0FF;">ATIVIDADES (${tasks.length}) | MEM (${mems.length})</strong>
           <button id="closeJTask" style="background:none;border:none;color:#FF1E56;font-weight:bold;cursor:pointer;font-size:14px;">✕</button>
         </div>
         <div style="max-height:130px;overflow-y:auto;margin-bottom:8px;">
@@ -229,10 +245,10 @@
               <span>• ${t}</span>
               <button data-del="${i}" style="background:rgba(57,255,20,0.15);border:1px solid #39FF14;color:#39FF14;border-radius:4px;padding:1px 6px;cursor:pointer;">✓</button>
             </div>
-          `).join('') : '<div style="opacity:0.6;">Nenhuma tarefa pendente.</div>'}
+          `).join('') : '<div style="opacity:0.6;">Nenhuma atividade pendente.</div>'}
         </div>
         <div style="display:flex;gap:4px;">
-          <input id="newJTaskInp" placeholder="Adicionar tarefa..." style="flex:1;background:#0f172a;border:1px solid #334155;color:#fff;padding:5px 6px;border-radius:4px;font-size:11px;">
+          <input id="newJTaskInp" placeholder="Nova atividade..." style="flex:1;background:#0f172a;border:1px solid #334155;color:#fff;padding:5px 6px;border-radius:4px;font-size:11px;">
           <button id="addJTaskBtn" style="background:#00F0FF;color:#000;border:none;border-radius:4px;padding:5px 10px;font-weight:bold;cursor:pointer;">+</button>
         </div>
       `;
@@ -260,7 +276,6 @@
     document.body.appendChild(modal);
   }
 
-  // Observa o #hudL para impedir que o index.html zere os contadores
   function initHudObserver() {
     const hudL = document.getElementById('hudL');
     if (hudL) {
@@ -280,7 +295,6 @@
     }
   }
 
-  // Lê tarefas ao acordar do modo Dormir
   function watchWakeUp() {
     const sleepBtn = Array.from(document.querySelectorAll('#bar button'))
       .find(b => b.textContent.trim().toLowerCase().includes('dormir'));
@@ -306,7 +320,7 @@
   setTimeout(() => {
     initHudObserver();
     watchWakeUp();
-    showToast('🧠 Módulo Memória & Tasks v3 ativo');
-  }, 600);
+    syncHud();
+  }, 500);
 })();
-    
+          
