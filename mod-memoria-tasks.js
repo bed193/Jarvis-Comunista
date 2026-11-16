@@ -1,14 +1,16 @@
-/* === mod-memoria-tasks.js (v2.0 - Blindado com res.clone()) === */
+/* === mod-memoria-tasks.js (v3.0 - Blindado com Observer + Fallback Direto) === */
 (function () {
-  if (window.__jarvisMemTasksLoaded) return;
-  window.__jarvisMemTasksLoaded = true;
+  if (window.__jarvisMemTasksV3) return;
+  window.__jarvisMemTasksV3 = true;
 
   const MEM_KEY = 'jarvis_memories';
   const TASK_KEY = 'jarvis_tasks';
 
   function getMem() {
-    try { return JSON.parse(localStorage.getItem(MEM_KEY) || '[]'); }
-    catch { return []; }
+    try {
+      const data = JSON.parse(localStorage.getItem(MEM_KEY) || '[]');
+      return Array.isArray(data) ? data : [];
+    } catch { return []; }
   }
   function saveMem(arr) {
     localStorage.setItem(MEM_KEY, JSON.stringify(arr.slice(-30)));
@@ -16,30 +18,99 @@
   }
 
   function getTasks() {
-    try { return JSON.parse(localStorage.getItem(TASK_KEY) || '[]'); }
-    catch { return []; }
+    try {
+      const data = JSON.parse(localStorage.getItem(TASK_KEY) || '[]');
+      return Array.isArray(data) ? data : [];
+    } catch { return []; }
   }
   function saveTasks(arr) {
     localStorage.setItem(TASK_KEY, JSON.stringify(arr));
     syncHud();
   }
 
-  // Sincroniza MEM: X e TASKS: X no #hudL real
+  function showToast(msg) {
+    const old = document.getElementById('jMemToast');
+    if (old) old.remove();
+    const t = document.createElement('div');
+    t.id = 'jMemToast';
+    t.textContent = msg;
+    t.style.cssText =
+      'position:fixed;top:48px;left:50%;transform:translateX(-50%);' +
+      'background:rgba(0,240,255,0.18);border:1px solid #00F0FF;color:#00F0FF;' +
+      'padding:4px 12px;border-radius:12px;font-family:monospace;font-size:11px;' +
+      'z-index:10000;pointer-events:none;backdrop-filter:blur(4px);';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2800);
+  }
+
+  // Sincroniza MEM: X e TASKS: X no #hudL sem entrar em loop infinito
+  let syncing = false;
   function syncHud() {
+    if (syncing) return;
     const hudL = document.getElementById('hudL');
     if (!hudL) return;
+
     const mCount = getMem().length;
     const tCount = getTasks().length;
-    hudL.innerHTML = hudL.innerHTML
+    const html = hudL.innerHTML;
+    const updated = html
       .replace(/MEM:\s*\d+/i, `MEM: ${mCount}`)
       .replace(/TASKS:\s*\d+/i, `TASKS: ${tCount}`);
+
+    if (updated !== html) {
+      syncing = true;
+      hudL.innerHTML = updated;
+      syncing = false;
+    }
+  }
+
+  // Fallback direto na fala do usuário (garante funcionamento mesmo se a IA esquecer a tag)
+  function parseUserDirect(userText) {
+    if (!userText || typeof userText !== 'string') return;
+    const clean = userText.trim();
+
+    // Ex: "lembra que eu gosto de café", "guarda na memória que..."
+    const memMatch = clean.match(/(?:lembr[ae]|guard[ae]\s+na\s+mem[óo]ria|salva\s+na\s+mem[óo]ria|anota\s+que)\s+(?:que\s+)?(.+)/i);
+    if (memMatch && memMatch[1].length > 3) {
+      const fato = memMatch[1].replace(/[.!?]+$/, '').trim();
+      const mems = getMem();
+      if (!mems.some(x => x.toLowerCase() === fato.toLowerCase())) {
+        mems.push(fato);
+        saveMem(mems);
+        showToast(`💾 Memória: ${fato}`);
+      }
+    }
+
+    // Ex: "anota a tarefa comprar cabo", "adiciona tarefa estudar", "cria um lembrete..."
+    const taskMatch = clean.match(/(?:anot[ae]\s+(?:a\s+)?tarefa|adicion[ae]\s+(?:a\s+)?tarefa|nova\s+tarefa|coloca\s+nas\s+tarefas|lembrete\s+de)\s*:?\s*(.+)/i);
+    if (taskMatch && taskMatch[1].length > 2) {
+      const desc = taskMatch[1].replace(/[.!?]+$/, '').trim();
+      const tasks = getTasks();
+      if (!tasks.some(x => x.toLowerCase() === desc.toLowerCase())) {
+        tasks.push(desc);
+        saveTasks(tasks);
+        showToast(`📌 Tarefa: ${desc}`);
+      }
+    }
+
+    // Ex: "concluí a tarefa...", "já fiz a tarefa..."
+    const doneMatch = clean.match(/(?:conclu[íi]|terminei|j[áa]\s+fiz|marca\s+como\s+feita)\s+(?:a\s+tarefa\s+)?(.+)/i);
+    if (doneMatch && doneMatch[1].length > 2) {
+      const key = doneMatch[1].replace(/[.!?]+$/, '').trim().toLowerCase();
+      let tasks = getTasks();
+      const before = tasks.length;
+      tasks = tasks.filter(t => !t.toLowerCase().includes(key));
+      if (tasks.length < before) {
+        saveTasks(tasks);
+        showToast(`✅ Tarefa concluída!`);
+      }
+    }
   }
 
   // Processa tags invisíveis da IA
-  function parseTags(raw) {
+  function parseAITags(raw) {
     if (!raw || typeof raw !== 'string') return;
 
-    // [save: fato]
     const saveMatches = [...raw.matchAll(/\[save:\s*([^\]]+)\]/gi)];
     if (saveMatches.length) {
       const mems = getMem();
@@ -47,12 +118,12 @@
         const fato = m[1].trim();
         if (fato && !mems.some(x => x.toLowerCase() === fato.toLowerCase())) {
           mems.push(fato);
+          showToast(`💾 Memória: ${fato}`);
         }
       });
       saveMem(mems);
     }
 
-    // [task_add: descrição]
     const addMatches = [...raw.matchAll(/\[task_add:\s*([^\]]+)\]/gi)];
     if (addMatches.length) {
       const tasks = getTasks();
@@ -60,24 +131,28 @@
         const desc = m[1].trim();
         if (desc && !tasks.some(x => x.toLowerCase() === desc.toLowerCase())) {
           tasks.push(desc);
+          showToast(`📌 Tarefa: ${desc}`);
         }
       });
       saveTasks(tasks);
     }
 
-    // [task_done: palavra-chave]
     const doneMatches = [...raw.matchAll(/\[task_done:\s*([^\]]+)\]/gi)];
     if (doneMatches.length) {
       let tasks = getTasks();
+      const before = tasks.length;
       doneMatches.forEach(m => {
         const key = m[1].trim().toLowerCase();
         tasks = tasks.filter(t => !t.toLowerCase().includes(key));
       });
-      saveTasks(tasks);
+      if (tasks.length < before) {
+        saveTasks(tasks);
+        showToast(`✅ Tarefa concluída!`);
+      }
     }
   }
 
-  // Intercepta window.fetch com segurança (usando res.clone())
+  // Intercepta window.fetch
   const origFetch = window.fetch;
   window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
@@ -86,16 +161,22 @@
       try {
         const payload = JSON.parse(init.body);
         if (Array.isArray(payload.messages)) {
+          // Lê última mensagem do usuário para fallback direto
+          const lastUser = [...payload.messages].reverse().find(m => m.role === 'user');
+          if (lastUser) {
+            const txt = typeof lastUser.content === 'string'
+              ? lastUser.content
+              : (Array.isArray(lastUser.content) ? (lastUser.content.find(c => c.type === 'text')?.text || '') : '');
+            parseUserDirect(txt);
+          }
+
           const mems = getMem();
           const tasks = getTasks();
           const extraSys =
-            `\n[SISTEMA MEMÓRIA E TAREFAS ATIVO]\n` +
-            `Memórias salvas sobre o usuário: ${mems.length ? mems.join(' | ') : 'nenhuma ainda'}.\n` +
-            `Tarefas pendentes: ${tasks.length ? tasks.join(' | ') : 'nenhuma'}.\n` +
-            `REGRAS OBRIGATÓRIAS DE TAGS INVISÍVEIS:\n` +
-            `- Se o usuário revelar qualquer dado pessoal, gosto, nome, rotina ou pedir para lembrar algo, inclua no fim: [save: fato curto]\n` +
-            `- Se o usuário pedir para anotar/adicionar uma tarefa ou lembrete, inclua no fim: [task_add: descrição curta]\n` +
-            `- Se o usuário disser que concluiu/fez uma tarefa, inclua no fim: [task_done: palavra-chave]\n`;
+            `\n[MEMÓRIA E TAREFAS DO USUÁRIO]\n` +
+            `Memórias: ${mems.length ? mems.join(' | ') : 'nenhuma'}.\n` +
+            `Tarefas: ${tasks.length ? tasks.join(' | ') : 'nenhuma'}.\n` +
+            `Tags opcionais no fim da resposta: [save: fato], [task_add: tarefa], [task_done: chave].\n`;
 
           const sysMsg = payload.messages.find(m => m.role === 'system');
           if (sysMsg && typeof sysMsg.content === 'string') {
@@ -105,7 +186,7 @@
           }
           init.body = JSON.stringify(payload);
         }
-      } catch (e) { /* mantém body original se falhar */ }
+      } catch (e) {}
     }
 
     const response = await origFetch.apply(this, arguments);
@@ -115,14 +196,14 @@
         const cloned = response.clone();
         const data = await cloned.json();
         const reply = data?.choices?.[0]?.message?.content || data?.reply || data?.text || '';
-        parseTags(reply);
-      } catch (e) { /* ignora erro de parse */ }
+        parseAITags(reply);
+      } catch (e) {}
     }
 
     return response;
   };
 
-  // Painel gerenciável ao tocar em TASKS no HUD
+  // Modal de Tarefas e Memórias ao tocar em TASKS no HUD
   function openTasksModal() {
     const old = document.getElementById('jarvisTasksModal');
     if (old) { old.remove(); return; }
@@ -130,19 +211,19 @@
     const modal = document.createElement('div');
     modal.id = 'jarvisTasksModal';
     modal.style.cssText =
-      'position:fixed;top:64px;left:12px;width:270px;background:rgba(8,12,20,0.95);' +
+      'position:fixed;top:64px;left:12px;width:275px;background:rgba(8,12,20,0.96);' +
       'border:1px solid #00F0FF;border-radius:8px;padding:12px;z-index:9999;' +
-      'color:#E2E8F0;font-family:monospace;font-size:12px;box-shadow:0 0 18px rgba(0,240,255,0.25);';
+      'color:#E2E8F0;font-family:monospace;font-size:12px;box-shadow:0 0 18px rgba(0,240,255,0.3);';
 
     function render() {
       const tasks = getTasks();
       const mems = getMem();
       modal.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;border-bottom:1px solid rgba(0,240,255,0.3);padding-bottom:4px;">
-          <strong style="color:#00F0FF;">TAREFAS (${tasks.length}) & MEM (${mems.length})</strong>
-          <button id="closeJTask" style="background:none;border:none;color:#FF1E56;font-weight:bold;cursor:pointer;">✕</button>
+          <strong style="color:#00F0FF;">TASKS (${tasks.length}) | MEM (${mems.length})</strong>
+          <button id="closeJTask" style="background:none;border:none;color:#FF1E56;font-weight:bold;cursor:pointer;font-size:14px;">✕</button>
         </div>
-        <div style="max-height:140px;overflow-y:auto;margin-bottom:8px;">
+        <div style="max-height:130px;overflow-y:auto;margin-bottom:8px;">
           ${tasks.length ? tasks.map((t, i) => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
               <span>• ${t}</span>
@@ -151,8 +232,8 @@
           `).join('') : '<div style="opacity:0.6;">Nenhuma tarefa pendente.</div>'}
         </div>
         <div style="display:flex;gap:4px;">
-          <input id="newJTaskInp" placeholder="Nova tarefa..." style="flex:1;background:#0f172a;border:1px solid #334155;color:#fff;padding:4px 6px;border-radius:4px;font-size:11px;">
-          <button id="addJTaskBtn" style="background:#00F0FF;color:#000;border:none;border-radius:4px;padding:4px 8px;font-weight:bold;cursor:pointer;">+</button>
+          <input id="newJTaskInp" placeholder="Adicionar tarefa..." style="flex:1;background:#0f172a;border:1px solid #334155;color:#fff;padding:5px 6px;border-radius:4px;font-size:11px;">
+          <button id="addJTaskBtn" style="background:#00F0FF;color:#000;border:none;border-radius:4px;padding:5px 10px;font-weight:bold;cursor:pointer;">+</button>
         </div>
       `;
       modal.querySelector('#closeJTask').onclick = () => modal.remove();
@@ -179,27 +260,30 @@
     document.body.appendChild(modal);
   }
 
-  // Liga o clique no #tasksBtn ou na área de TASKS do #hudL
-  function bindHudClicks() {
+  // Observa o #hudL para impedir que o index.html zere os contadores
+  function initHudObserver() {
+    const hudL = document.getElementById('hudL');
+    if (hudL) {
+      syncHud();
+      const obs = new MutationObserver(() => syncHud());
+      obs.observe(hudL, { childList: true, subtree: true, characterData: true });
+    }
+
     const tasksBtn = document.getElementById('tasksBtn');
     if (tasksBtn) {
       tasksBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         openTasksModal();
       });
-    }
-    const hudL = document.getElementById('hudL');
-    if (hudL && !tasksBtn) {
+    } else if (hudL) {
       hudL.addEventListener('click', openTasksModal);
     }
   }
 
   // Lê tarefas ao acordar do modo Dormir
   function watchWakeUp() {
-    const findSleepBtn = () => Array.from(document.querySelectorAll('#bar button'))
+    const sleepBtn = Array.from(document.querySelectorAll('#bar button'))
       .find(b => b.textContent.trim().toLowerCase().includes('dormir'));
-
-    const sleepBtn = findSleepBtn();
     if (!sleepBtn) return;
 
     let wasSleeping = sleepBtn.classList.contains('on');
@@ -219,11 +303,10 @@
     obs.observe(sleepBtn, { attributes: true, attributeFilter: ['class'] });
   }
 
-  // Inicialização
   setTimeout(() => {
-    syncHud();
-    bindHudClicks();
+    initHudObserver();
     watchWakeUp();
-  }, 500);
+    showToast('🧠 Módulo Memória & Tasks v3 ativo');
+  }, 600);
 })();
-                                          
+    
